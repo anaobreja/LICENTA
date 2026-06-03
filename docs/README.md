@@ -55,13 +55,7 @@ Nu este nevoie de Node.js, PostgreSQL sau Docker pentru rularea de bază.
 
 ---
 
-## Pornire rapidă (recomandat)
-
-### Varianta 1 — dublu-click
-
-Dublu-click pe fișierul **`start.bat`** din folderul proiectului.
-
-### Varianta 2 — terminal PowerShell
+### Terminal PowerShell
 
     cd D:\LICENTA
     python run.py
