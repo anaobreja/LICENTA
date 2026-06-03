@@ -36,8 +36,7 @@ Sistem de gestionare a **identității digitale** pentru studenți, cu verificar
 
 ### Work in progress / Limitări cunoscute
 
-- **Aplicație web mobilă / deploy în cloud** — urmează ca platforma să fie publicată pe un serviciu cloud (Render / Railway.app), accesibilă de pe orice dispozitiv fără rulare locală; momentan aplicația rulează local și poate fi accesată de pe telefon în aceeași rețea (vezi secțiunea de mai jos)
-- Integrarea cu baze de date universitare reale (momentan simulată prin tabelul `university_students`)
+- **Aplicație web mobilă / deploy în cloud** - urmează ca platforma să fie publicată pe un serviciu cloud (Render / Railway.app), accesibilă de pe orice dispozitiv fără rulare locală; momentan aplicația rulează local și poate fi accesată de pe telefon în aceeași rețea (vezi secțiunea de mai jos)
 - Verificarea offline a cardului digital (fără internet)
 - Prezentare selectivă a credențialelor (student alege ce claims să dezvăluie)
 - Dashboard de fraudă / anomalii (token reutilizat, respingeri repetate)
@@ -92,12 +91,21 @@ Aplicația devine disponibilă la: **http://127.0.0.1:8765**
 
 ## Flux demo recomandat pentru prezentare
 
-1. **Login** ca `user.demo@railwaydemo.com` → Dashboard (stepper identitate)
-2. **Documente** → Scanează CI → completează legitimație → trimite
-3. **Login** ca `agent.upb@railwaydemo.com` → Dashboard agent → aprobă cererea
-4. **Login** din nou ca pasager → Dashboard (stepper avansat la „Card activ")
-5. **Card Digital** → generează QR cu countdown
-6. **Login** ca `agent.train@railwaydemo.com` → Verificare card → ecran verde VALID
+### Partea 1 — Înregistrare și depunere documente (utilizator nou)
+
+1. **Înregistrare** cont nou (`/register`) cu email și parolă
+2. **Login** cu noul cont → Dashboard (stepper la pasul 1 — „Cont creat")
+3. **Documente** → apasă „Scanează CI" → fotografiezi CI-ul → datele se completează automat din MRZ (nume, serie, dată naștere, sex)
+4. Completează legitimația de student, selectează universitatea și anul → **Trimite cererea**
+5. Dashboard → stepper avansat la pasul 2 — „Documente depuse / În așteptare" (badge portocaliu pulsând)
+6. **Login** ca `agent.upb@railwaydemo.com / demo` → Dashboard agent → cererea apare cu datele CI și poza legitimației → **Aprobă**
+
+### Partea 2 — Card digital activ (utilizator demo cu credențiale gata)
+
+7. **Login** ca `user.demo@railwaydemo.com / demo` → Dashboard (stepper la pasul 4 — „Card activ", credențiale active)
+8. **Card Digital** → apasă „Generează token dinamic" → apare QR cu countdown 120 secunde
+9. Tap pe QR → se deschide fullscreen (ideal pe telefon, prezentat agentului)
+10. **Login** ca `agent.train@railwaydemo.com / demo` → Verificare card → scanează QR → ecran **VERDE VALID** + claims pasager
 
 ---
 
