@@ -253,7 +253,6 @@ def _initialize_sqlite_demo_data(sqlite_engine):
         ("George", "Constantinescu", "george.constantinescu@email.com", "$2b$12$demo_hash_george_constantinescu_123456789012345678901234", "+40725667788", "1978-01-09", "conductor"),
         ("Administrator", "System", "admin@railway.gov.ro", "$2b$12$demo_hash_admin_system_1234567890123456789012345678901234", "+40726778899", "1980-06-20", "admin"),
         ("Demo", "User", "user.demo@railwaydemo.com", "$2b$12$demo_hash_user_demo_123456789012345678901234567890123456", "+40720000001", "1999-01-01", "passenger"),
-        ("Demo", "Issuer", "agent.issuer@railwaydemo.com", "$2b$12$demo_hash_agent_issuer_12345678901234567890123456789012", "+40720000002", "1985-01-01", "admin"),
         ("Demo", "Train", "agent.train@railwaydemo.com", "$2b$12$demo_hash_agent_train_123456789012345678901234567890123", "+40720000003", "1985-01-01", "conductor"),
         ("Agent", "UPB",   "agent.upb@railwaydemo.com",   "$2b$12$demo_hash_agent_upb_1234567890123456789012345678901234", "+40720000004", "1985-01-01", "university_agent"),
         ("Agent", "ASE",   "agent.ase@railwaydemo.com",   "$2b$12$demo_hash_agent_ase_1234567890123456789012345678901234", "+40720000005", "1986-01-01", "university_agent"),

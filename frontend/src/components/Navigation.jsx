@@ -19,6 +19,8 @@ function Navigation({ user, onLogout }) {
         if (r.ok) {
           const data = await r.json()
           setUnread(data.filter(n => !n.is_read).length)
+        } else if (r.status === 401) {
+          clearInterval(id)
         }
       } catch (_) {}
     }
@@ -58,10 +60,6 @@ function Navigation({ user, onLogout }) {
 
           {user?.role === 'train_verifier' && (
             <Link to="/verify" className="hover:text-blue-200">Verificare card digital</Link>
-          )}
-
-          {user?.role === 'issuer_verifier' && (
-            <Link to="/issuer" className="hover:text-blue-200">Issuer</Link>
           )}
 
           {user?.role === 'university_agent' && (

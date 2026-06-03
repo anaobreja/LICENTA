@@ -5,7 +5,6 @@ function ProtectedRoute({ isAuthenticated, user, role, children }) {
 
   const getRouteForRole = (userRole) => {
     if (userRole === 'train_verifier')   return '/verify'
-    if (userRole === 'issuer_verifier')  return '/issuer'
     if (userRole === 'university_agent') return '/agent'
     return '/dashboard'
   }

@@ -11,7 +11,6 @@ import Credentials from './pages/Credentials'
 import PresentIdentity from './pages/PresentIdentity'
 import VerifyPresentation from './pages/VerifyPresentation'
 import Profile from './pages/Profile'
-import AdminDashboard from './pages/AdminDashboard'
 import UniversityAgentDashboard from './pages/UniversityAgentDashboard'
 import Settings from './pages/Settings'
 
@@ -178,16 +177,6 @@ function App() {
           />
 
 
-          {/* Issuer Verifier Routes */}
-          <Route 
-            path="/issuer" 
-            element={
-              <ProtectedRoute isAuthenticated={isAuthenticated} user={user} role="issuer_verifier">
-                <AdminDashboard />
-              </ProtectedRoute>
-            } 
-          />
-
           {/* University Agent */}
           <Route
             path="/agent"
@@ -197,9 +186,6 @@ function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* Backward-compatible alias */}
-          <Route path="/admin" element={<Navigate to="/issuer" replace />} />
 
           {/* Default */}
           <Route path="/" element={<Navigate to={user?.role === 'university_agent' ? '/agent' : '/dashboard'} />} />

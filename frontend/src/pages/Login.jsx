@@ -22,7 +22,6 @@ function Login({ onLogin }) {
 
   const getRouteForRole = (role) => {
     if (role === 'train_verifier')   return '/verify'
-    if (role === 'issuer_verifier')  return '/issuer'
     if (role === 'university_agent') return '/agent'
     return '/dashboard'
   }

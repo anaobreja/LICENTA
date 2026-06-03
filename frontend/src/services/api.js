@@ -183,7 +183,7 @@ export const submitIdentityValidationRequest = async ({
   formData.append('legitimation_number_masked', legitimation_number_masked)
   formData.append('legitimation_photo', legitimation_photo)
   formData.append('university_name', university_name)
-  formData.append('year_of_study', String(year_of_study))
+  formData.append('year_of_study', String(isNaN(year_of_study) || !year_of_study ? 0 : year_of_study))
   formData.append('ci_number', ci_number)
   formData.append('ci_name', ci_name)
   formData.append('ci_date_of_birth', ci_date_of_birth)

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { generatePresentation, getMyCard } from '../services/api'
 
 const TTL = 120
@@ -9,7 +9,7 @@ function CountdownRing({ secondsLeft, total = TTL }) {
   const dashOffset = CIRCUMFERENCE * (1 - secondsLeft / total)
   const color = secondsLeft > 40 ? '#10b981' : secondsLeft > 15 ? '#f59e0b' : '#ef4444'
   return (
-    <svg width="130" height="130" className="absolute -top-3 -left-3 -rotate-90">
+    <svg width="130" height="130" className="absolute inset-0 -rotate-90">
       <circle cx="65" cy="65" r={R} fill="none" stroke="#1e293b" strokeWidth="8" />
       <circle cx="65" cy="65" r={R} fill="none" stroke={color} strokeWidth="8"
         strokeDasharray={CIRCUMFERENCE} strokeDashoffset={dashOffset} strokeLinecap="round"
@@ -25,6 +25,7 @@ export default function PresentIdentity() {
   const [error, setError] = useState('')
   const [loadingCard, setLoadingCard] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
   const timerRef = useRef(null)
 
   useEffect(() => {
@@ -39,7 +40,10 @@ export default function PresentIdentity() {
     const tick = () => {
       const left = Math.max(0, Math.round((new Date(expiresAt) - Date.now()) / 1000))
       setSecondsLeft(left)
-      if (left === 0) { clearInterval(timerRef.current); generate() }
+      if (left === 0) {
+        clearInterval(timerRef.current)
+        generate()
+      }
     }
     tick()
     timerRef.current = setInterval(tick, 1000)
@@ -50,7 +54,14 @@ export default function PresentIdentity() {
     try {
       const data = await generatePresentation({ ttl_seconds: TTL })
       setPresentation(data); setSecondsLeft(TTL); startCountdown(data.expires_at)
-    } catch (e) { setError(e.message || 'Nu am putut genera prezentarea') }
+    } catch (e) {
+      if (e.message?.includes('401') || e.message?.includes('Unauthorized')) {
+        setError('Sesiunea a expirat. Te rugăm să te autentifici din nou.')
+        if (timerRef.current) clearInterval(timerRef.current)
+      } else {
+        setError(e.message || 'Nu am putut genera prezentarea')
+      }
+    }
     finally { setLoading(false) }
   }
 
@@ -99,26 +110,42 @@ export default function PresentIdentity() {
           <div className="font-mono text-sm break-all bg-slate-100 dark:bg-slate-950 dark:text-slate-100 rounded-lg p-3 mb-4">{presentation.token_value}</div>
 
           {presentation.qr_data_url && (
-            <div className="flex flex-col items-center gap-4">
-              {/* QR + ring + tap fullscreen */}
+            <div className="flex flex-col items-center gap-5">
+              {/* QR — tap pentru fullscreen */}
               <button
                 type="button"
-                onClick={() => document.documentElement.requestFullscreen?.()}
-                className="relative inline-flex items-center justify-center focus:outline-none group"
-                title="Tap pentru fullscreen"
+                onClick={() => setFullscreen(true)}
+                className="focus:outline-none group"
               >
-                <CountdownRing secondsLeft={secondsLeft} />
-                <div className="relative z-10 bg-white p-2 rounded-2xl shadow group-hover:shadow-xl transition">
-                  <img src={presentation.qr_data_url} alt="QR prezentare" className="w-48 h-48 rounded-xl" />
+                <div className="bg-white p-3 rounded-2xl shadow group-hover:shadow-xl transition">
+                  <img src={presentation.qr_data_url} alt="QR prezentare" className="w-52 h-52 rounded-xl" />
                 </div>
-                <span className="absolute -bottom-5 text-xs text-slate-400">⛶ tap = fullscreen</span>
+                <span className="block text-center text-xs text-slate-400 mt-1">⛶ tap = fullscreen</span>
               </button>
 
-              <div className="flex flex-col items-center mt-4">
-                <span className={`text-4xl font-black tabular-nums ${ringColor}`}>
-                  {String(Math.floor(secondsLeft / 60)).padStart(2,'0')}:{String(secondsLeft % 60).padStart(2,'0')}
-                </span>
-                <span className="text-xs text-slate-400 mt-1">
+              {/* Modal fullscreen */}
+              {fullscreen && (
+                <div
+                  className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center cursor-pointer"
+                  onClick={() => setFullscreen(false)}
+                >
+                  <img src={presentation.qr_data_url} alt="QR fullscreen" className="w-80 h-80 rounded-2xl" />
+                  <div className={`mt-6 text-5xl font-black tabular-nums ${ringColor}`}>
+                    {String(Math.floor(secondsLeft / 60)).padStart(2,'0')}:{String(secondsLeft % 60).padStart(2,'0')}
+                  </div>
+                  <p className="text-slate-400 text-sm mt-3">Apasă oriunde pentru a închide</p>
+                </div>
+              )}
+
+              {/* Countdown ring + timer separat */}
+              <div className="flex flex-col items-center gap-1">
+                <div className="relative flex items-center justify-center" style={{ width: 130, height: 130 }}>
+                  <CountdownRing secondsLeft={secondsLeft} />
+                  <span className={`text-3xl font-black tabular-nums ${ringColor}`}>
+                    {String(Math.floor(secondsLeft / 60)).padStart(2,'0')}:{String(secondsLeft % 60).padStart(2,'0')}
+                  </span>
+                </div>
+                <span className="text-xs text-slate-400">
                   {secondsLeft === 0 ? 'Se regenerează...' : 'se regenerează automat la expirare'}
                 </span>
               </div>

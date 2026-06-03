@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from app.core.database import DATABASE_BACKEND, SessionLocal
 from app.core.security import decode_token
 from app.core.roles import (
-    ROLE_ISSUER_VERIFIER,
     ROLE_PASSENGER,
     ROLE_TRAIN_VERIFIER,
     ROLE_UNIVERSITY_AGENT,
@@ -778,7 +777,7 @@ def submit_identity_validation_request(
     legitimation_number_masked: str = Form(...),
     legitimation_photo: UploadFile | None = File(default=None),
     university_name: str = Form(default=""),
-    year_of_study: int = Form(default=0),
+    year_of_study: str = Form(default="0"),
     ci_number: str = Form(default=""),
     ci_name: str = Form(default=""),
     ci_date_of_birth: str = Form(default=""),
@@ -845,6 +844,13 @@ def submit_identity_validation_request(
     else:
         legitimation_path = existing_photo_path
 
+    try:
+        _safe_year = int(year_of_study)
+        if not (1 <= _safe_year <= 6):
+            _safe_year = None
+    except (ValueError, TypeError):
+        _safe_year = None
+
     legitimation_doc = _insert_source_document(
         db=db,
         user_id=current["user_id"],
@@ -852,7 +858,7 @@ def submit_identity_validation_request(
         document_number_masked=legitimation_number_masked,
         document_image_path=legitimation_path,
         university_name=university_name.strip() or None,
-        year_of_study=year_of_study if year_of_study and 1 <= year_of_study <= 6 else None,
+        year_of_study=_safe_year,
         ci_number=ci_number.strip() or None,
         ci_name=ci_name.strip() or None,
         ci_date_of_birth=ci_date_of_birth.strip() or None,
@@ -902,7 +908,7 @@ def get_document_photo(
 
     can_access = (
         current["user_id"] == row["user_id"]
-        or has_role(current.get("role"), ROLE_ISSUER_VERIFIER)
+        or has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
         or has_role(current.get("role"), ROLE_TRAIN_VERIFIER)
         or has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
     )
@@ -1168,7 +1174,7 @@ def issuer_pending_documents(
     current = _current_user(authorization, db)
 
     is_agent = has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
-    is_issuer = has_role(current.get("role"), ROLE_ISSUER_VERIFIER)
+    is_issuer = has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
     if not is_agent and not is_issuer:
         raise HTTPException(status_code=403, detail="Acces interzis")
 
@@ -1220,7 +1226,7 @@ def university_stats(
     current = _current_user(authorization, db)
 
     is_agent = has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
-    is_issuer = has_role(current.get("role"), ROLE_ISSUER_VERIFIER)
+    is_issuer = has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
     if not is_agent and not is_issuer:
         raise HTTPException(status_code=403, detail="Acces interzis")
 
@@ -1291,7 +1297,7 @@ def issuer_document_details(
 ):
     _ensure_identity_tables(db)
     current = _current_user(authorization, db)
-    _require_role(current, ROLE_ISSUER_VERIFIER)
+    _require_role(current, ROLE_UNIVERSITY_AGENT)
 
     row = db.execute(
         text(
@@ -1324,7 +1330,7 @@ def issuer_approve_document(
 ):
     _ensure_identity_tables(db)
     reviewer = _current_user(authorization, db)
-    if not has_role(reviewer.get("role"), ROLE_ISSUER_VERIFIER) and not has_role(reviewer.get("role"), ROLE_UNIVERSITY_AGENT):
+    if not has_role(reviewer.get("role"), ROLE_UNIVERSITY_AGENT):
         raise HTTPException(status_code=403, detail="Acces interzis")
 
     doc = db.execute(
@@ -1440,7 +1446,7 @@ def issuer_reject_document(
 ):
     _ensure_identity_tables(db)
     reviewer = _current_user(authorization, db)
-    if not has_role(reviewer.get("role"), ROLE_ISSUER_VERIFIER) and not has_role(reviewer.get("role"), ROLE_UNIVERSITY_AGENT):
+    if not has_role(reviewer.get("role"), ROLE_UNIVERSITY_AGENT):
         raise HTTPException(status_code=403, detail="Acces interzis")
 
     doc = db.execute(
@@ -1499,7 +1505,7 @@ def issuer_credentials(
 ):
     _ensure_identity_tables(db)
     reviewer = _current_user(authorization, db)
-    _require_role(reviewer, ROLE_ISSUER_VERIFIER)
+    _require_role(reviewer, ROLE_UNIVERSITY_AGENT)
 
     rows = db.execute(
         text(
@@ -1524,7 +1530,7 @@ def issuer_revoke_credential(
 ):
     _ensure_identity_tables(db)
     reviewer = _current_user(authorization, db)
-    _require_role(reviewer, ROLE_ISSUER_VERIFIER)
+    _require_role(reviewer, ROLE_UNIVERSITY_AGENT)
 
     row = db.execute(
         text(
