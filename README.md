@@ -36,7 +36,7 @@ Sistem de gestionare a **identității digitale** pentru studenți, cu verificar
 
 ### Work in progress / Limitări cunoscute
 
-- **Aplicație web mobilă** — urmează ca platforma să fie accesibilă public pe web, optimizată pentru utilizare de pe telefon (PWA / responsive complet), fără necesitatea rulării locale
+- **Aplicație web mobilă / deploy în cloud** — urmează ca platforma să fie publicată pe un serviciu cloud (Render / Railway.app), accesibilă de pe orice dispozitiv fără rulare locală; momentan aplicația rulează local și poate fi accesată de pe telefon în aceeași rețea (vezi secțiunea de mai jos)
 - Integrarea cu baze de date universitare reale (momentan simulată prin tabelul `university_students`)
 - Verificarea offline a cardului digital (fără internet)
 - Prezentare selectivă a credențialelor (student alege ce claims să dezvăluie)
@@ -147,6 +147,36 @@ Vizualizare baza de date: **[DB Browser for SQLite](https://sqlitebrowser.org/dl
     cd frontend
     npm install
     npm run build
+
+---
+
+## Acces de pe telefon și scanare QR
+
+### Accesare de pe telefon (aceeași rețea WiFi)
+
+1. Află IP-ul laptopului în CMD: `ipconfig` → caută „IPv4 Address" la adaptorul WiFi
+2. Asigură-te că aplicația rulează (`python run.py` sau `start.bat`)
+3. Pe telefon, deschide browser-ul și accesează: `http://<IP-laptop>:8765`
+
+Exemplu: dacă IP-ul e `172.20.10.13` → `http://172.20.10.13:8765`
+
+### Scanare QR card digital
+
+Fluxul complet pe două dispozitive:
+
+1. **Pasager (telefon)** → login → Card Digital → apasă „Generează token dinamic" → apare QR cu countdown 120 secunde
+2. **Agent tren (laptop sau alt telefon)** → login cu `agent.train@railwaydemo.com / demo` → Verificare card → pornește camera → scanează QR-ul pasagerului
+3. Apare ecran **VERDE (VALID)** sau **ROȘU (INVALID)** timp de 2 secunde, apoi detaliile cardului
+
+> Dacă camera nu funcționează la scanare, se poate introduce manual token-ul din câmpul text de sub QR.
+
+### Acces public temporar (fără WiFi comun)
+
+Folosind **ngrok** (gratuit), poți expune aplicația pe internet:
+
+    ngrok http 8765
+
+Se generează un URL de tipul `https://abc123.ngrok.io` — funcționează de pe orice rețea, cât timp laptopul rulează.
 
 ---
 
