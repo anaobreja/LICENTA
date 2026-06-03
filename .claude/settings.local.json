@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(docker volume ls --filter name=railway 2>&1)"
+    ]
+  }
+}

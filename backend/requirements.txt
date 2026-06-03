@@ -1,0 +1,36 @@
+# Backend Dependencies - FastAPI Railway System
+
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy>=2.0.49,<3.0.0
+psycopg2-binary==2.9.9
+alembic==1.12.1
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.1
+PyJWT==2.8.0
+
+# TOTP MFA
+pyotp==2.9.0
+qrcode==7.4.2
+# pillow==10.1.0  # commented out for local Windows/Python 3.14 (build issues)
+
+# Data Validation
+pydantic>=2.12.0,<3.0.0
+pydantic-settings>=2.8.0,<3.0.0
+email-validator>=2.3.0,<3.0.0
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
+
+# Development
+python-dotenv==1.0.0
+
