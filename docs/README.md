@@ -8,10 +8,10 @@ Sistem de gestionare a **identității digitale** pentru studenți, cu verificar
 
 | Diagramă | Fișier |
 |----------|--------|
-| Use Case | [docs/use-case.md](docs/use-case.md) |
-| Arhitectură | [docs/architecture.md](docs/architecture.md) |
-| Model de date (ER) | [docs/er-diagram.md](docs/er-diagram.md) |
-| Diagrame de secvență | [docs/sequence.md](docs/sequence.md) |
+| Use Case | [./use-case.md](docs/use-case.md) |
+| Arhitectură | [./architecture.md](docs/architecture.md) |
+| Model de date (ER) | [./er-diagram.md](docs/er-diagram.md) |
+| Diagrame de secvență | [./sequence.md](docs/sequence.md) |
 
 ---
 
