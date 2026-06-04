@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import engine, SessionLocal
 from app.core.config import settings
-from app.routers import auth, users, identity
+from app.routers import auth, users, identity, tickets
 
 
 # Event handlers
@@ -93,6 +93,7 @@ async def root():
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(identity.router)
+app.include_router(tickets.router)
 
 
 if __name__ == "__main__":
