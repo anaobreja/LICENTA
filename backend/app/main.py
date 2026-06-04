@@ -14,15 +14,15 @@ from app.routers import auth, identity, tickets, users
 # Lifespan: la startup verificam ca schema PostgreSQL este incarcata
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(">>> Railway Digital Identity Platform — starting...")
+    print("Railway Digital Identity Platform starting...")
     try:
         verify_schema_loaded()
-        print(">>> Schema PostgreSQL OK — toate tabelele esentiale prezente.")
+        print("Schema PostgreSQL OK")
     except RuntimeError as exc:
-        print(f">>> SCHEMA ERROR: {exc}")
+        print(f"SCHEMA ERROR: {exc}")
         raise
     yield
-    print(">>> Shutting down.")
+    print("Shutting down.")
 
 app = FastAPI(
     title="Railway Digital Identity Platform",
