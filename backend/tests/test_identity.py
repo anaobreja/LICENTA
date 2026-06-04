@@ -26,7 +26,7 @@ class TestDocumentManagement:
             data={
                 "legitimation_type": "student_card",
                 "legitimation_number_masked": "ST123456",
-                "university_name": "Universitatea Politehnica București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
                 "year_of_study": "2",
                 "ci_number": "XZ123456",
                 "ci_name": "Test User",
@@ -47,7 +47,7 @@ class TestDocumentManagement:
             data={
                 "legitimation_type": "student",   # invalid — should be "student_card"
                 "legitimation_number_masked": "ST000000",
-                "university_name": "Universitatea Politehnica București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
                 "year_of_study": "1",
             },
             files={
@@ -64,7 +64,7 @@ class TestDocumentManagement:
             data={
                 "legitimation_type": "student_card",
                 "legitimation_number_masked": "ST999999",
-                "university_name": "Universitatea Politehnica București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
                 "year_of_study": "1",
             },
             files={
@@ -178,7 +178,7 @@ class TestUniversityAgentWorkflow:
             data={
                 "legitimation_type": "student_card",
                 "legitimation_number_masked": doc_number,
-                "university_name": "Universitatea Politehnica București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
                 "year_of_study": "2",
                 "ci_number": "XZ999888",
                 "ci_name": "Integration Test",
@@ -338,7 +338,7 @@ class TestQRReplaySecurity:
             data={
                 "legitimation_type": "student_card",
                 "legitimation_number_masked": doc_number,
-                "university_name": "Universitatea Politehnica  București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
                 "year_of_study": "2",
                 "ci_number": "REP123456",
                 "ci_name": "Replay Test",
@@ -403,9 +403,18 @@ class TestQRReplaySecurity:
 class TestCrossUniversityAuthorizationSecurity:
     """SECURITY: Verify agents cannot approve documents from other universities"""
 
-    def test_agent_cannot_approve_different_university_student(self, client):
-        """ASE agent tries to approve UPB student - should fail"""
-        # Create UPB student and submit
+    def test_agent_cannot_approve_different_university_student(
+        self, client, upb_agent_token, ase_agent_token
+    ):
+        """
+        SECURITY: agentul ASE NU trebuie sa poata aproba un document de la UPB.
+        Doua paliere de aparare:
+          (1) /issuer/documents/pending — filtrare per universitate
+              => agentul ASE NU vede documentul UPB in lista.
+          (2) /issuer/documents/{id}/approve — verificare explicita cross-uni
+              => chiar daca cunoaste id-ul, approve esueaza cu 403.
+        """
+        # Pasul 1: creem un student UPB si depunem o cerere
         upb_student_token = register_and_login(client, "upb_student_cross")
         upb_doc_number = f"UPB{int(time.time() * 1000) % 100000}"
 
@@ -415,7 +424,7 @@ class TestCrossUniversityAuthorizationSecurity:
             data={
                 "legitimation_type": "student_card",
                 "legitimation_number_masked": upb_doc_number,
-                "university_name": "Universitatea Politehnica București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
                 "year_of_study": "1",
                 "ci_number": "XUP123456",
                 "ci_name": "UPB Test",
@@ -427,29 +436,40 @@ class TestCrossUniversityAuthorizationSecurity:
                 "legitimation_photo_verso": ("v.png", create_test_image_bytes(), "image/png"),
             },
         )
-        assert submit.status_code in (200, 201)
+        assert submit.status_code in (200, 201), submit.text
 
-        # ASE agent (hardcoded role from fixture) tries to approve UPB document
-        # This should either:
-        # 1. Not see the document in pending list (filtered by university), OR
-        # 2. See it but approval fails with 403 Forbidden
-        
-        # For now, we verify that if document is visible, approval is blocked
-        # In strict implementation, document shouldn't be visible to ASE agent at all
-
-        # Get pending documents from perspective of current token (if ASE agent available)
-        # For this test, we're verifying authorization at approval time
-        pending = client.get(
+        # Pasul 2: agentul UPB VEDE documentul; agentul ASE NU.
+        pending_upb = client.get(
             "/issuer/documents/pending",
-            headers={"Authorization": f"Bearer {upb_student_token}"},  # Student perspective
+            headers={"Authorization": f"Bearer {upb_agent_token}"},
         )
-        assert pending.status_code == 200
+        assert pending_upb.status_code == 200
+        upb_docs = pending_upb.json()
+        upb_doc = next(
+            (d for d in upb_docs if d.get("document_number_masked") == upb_doc_number),
+            None,
+        )
+        assert upb_doc is not None, "Documentul UPB ar trebui vizibil pentru agentul UPB"
+        upb_doc_id = upb_doc["id"]
 
-        docs = pending.json()
-        upb_doc = next((d for d in docs if d.get("document_number_masked") == upb_doc_number), None)
-        
-        if upb_doc:
-            # Verify that document is restricted by university
-            # If we had an ASE agent token, approval would fail
-            assert upb_doc.get("id") is not None
+        pending_ase = client.get(
+            "/issuer/documents/pending",
+            headers={"Authorization": f"Bearer {ase_agent_token}"},
+        )
+        assert pending_ase.status_code == 200
+        ase_docs = pending_ase.json()
+        assert not any(
+            d.get("document_number_masked") == upb_doc_number for d in ase_docs
+        ), "Documentul UPB nu trebuie sa apara pentru agentul ASE"
+
+        # Pasul 3: agentul ASE incearca direct sa aprobe documentul UPB => 403
+        approve_attempt = client.post(
+            f"/issuer/documents/{upb_doc_id}/approve",
+            headers={"Authorization": f"Bearer {ase_agent_token}"},
+            json={"notes": "attempted unauthorized approval"},
+        )
+        assert approve_attempt.status_code == 403, (
+            f"Cross-uni approval ar trebui blocat (403), primit {approve_attempt.status_code}: "
+            f"{approve_attempt.text}"
+        )
 

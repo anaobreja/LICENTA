@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.database import DATABASE_BACKEND, SessionLocal
+from app.core.database import SessionLocal
 from app.core.uploads import save_uploaded_image
 from app.core.security import decode_token
 from app.core.roles import (
@@ -278,111 +278,8 @@ def _require_role(user: dict, expected_role: str):
         )
 
 
-_IDENTITY_TABLES_DDL = [
-    """
-    CREATE TABLE IF NOT EXISTS source_documents (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        document_type VARCHAR(50) NOT NULL,
-        document_number_masked VARCHAR(64) NOT NULL,
-        document_image_path TEXT,
-        status VARCHAR(20) NOT NULL DEFAULT 'pending',
-        uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        university_name VARCHAR(255),
-        year_of_study INTEGER,
-        ci_number VARCHAR(50),
-        ci_name VARCHAR(200),
-        ci_date_of_birth VARCHAR(20),
-        ci_sex CHAR(1),
-        ci_address VARCHAR(300)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS document_reviews (
-        id SERIAL PRIMARY KEY,
-        document_id INTEGER NOT NULL,
-        reviewer_id INTEGER NOT NULL,
-        decision VARCHAR(20) NOT NULL,
-        notes TEXT,
-        reviewed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS notifications (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        category VARCHAR(50) NOT NULL,
-        title VARCHAR(255) NOT NULL,
-        message TEXT NOT NULL,
-        is_read BOOLEAN NOT NULL DEFAULT FALSE,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS user_credentials (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        credential_type VARCHAR(50) NOT NULL,
-        claim_value TEXT NOT NULL,
-        issuer_id INTEGER,
-        status VARCHAR(20) NOT NULL DEFAULT 'active',
-        issued_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        valid_until TIMESTAMP NOT NULL
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS issuers (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL UNIQUE,
-        issuer_type VARCHAR(50) NOT NULL,
-        is_active BOOLEAN NOT NULL DEFAULT TRUE
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS digital_cards (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL UNIQUE,
-        issuer_id INTEGER NOT NULL,
-        card_identifier VARCHAR(64) NOT NULL UNIQUE,
-        status VARCHAR(20) NOT NULL DEFAULT 'active',
-        issued_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        valid_until TIMESTAMP NOT NULL,
-        revoked_at TIMESTAMP
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS card_presentations (
-        id SERIAL PRIMARY KEY,
-        card_id INTEGER NOT NULL,
-        token_value VARCHAR(255) NOT NULL UNIQUE,
-        issued_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        expires_at TIMESTAMP NOT NULL,
-        status VARCHAR(20) NOT NULL DEFAULT 'active',
-        used_at TIMESTAMP
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS card_verifications (
-        id SERIAL PRIMARY KEY,
-        card_presentation_id INTEGER NOT NULL,
-        verifier_user_id INTEGER NOT NULL,
-        verification_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        result VARCHAR(20) NOT NULL,
-        notes TEXT
-    )
-    """,
-]
-
-
-def _ensure_identity_tables(db: Session):
-    for ddl in _IDENTITY_TABLES_DDL:
-        try:
-            db.execute(text("SAVEPOINT _ensure_sp"))
-            db.execute(text(ddl))
-            db.execute(text("RELEASE SAVEPOINT _ensure_sp"))
-        except Exception:
-            db.execute(text("ROLLBACK TO SAVEPOINT _ensure_sp"))
-    db.commit()
+# DDL is loaded from database/schema.sql at PostgreSQL container startup.
+# No runtime CREATE TABLE — the schema is the single source of truth.
 
 
 def _ensure_default_issuer(db: Session) -> int:
@@ -722,7 +619,6 @@ def create_document(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
     _require_role(current, ROLE_PASSENGER)
 
@@ -759,7 +655,6 @@ def create_document_with_photo(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
     _require_role(current, ROLE_PASSENGER)
 
@@ -811,7 +706,6 @@ def submit_identity_validation_request(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
     _require_role(current, ROLE_PASSENGER)
 
@@ -986,7 +880,6 @@ def get_document_photo(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
 
     row = db.execute(
@@ -1036,7 +929,6 @@ def list_my_documents(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
     _require_role(current, ROLE_PASSENGER)
 
@@ -1069,7 +961,6 @@ def list_my_credentials(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
     _require_role(current, ROLE_PASSENGER)
 
@@ -1096,7 +987,6 @@ def list_my_notifications(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
     _require_role(current, ROLE_PASSENGER)
 
@@ -1121,11 +1011,10 @@ def mark_my_notification_read(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
     _require_role(current, ROLE_PASSENGER)
 
-    read_val = True if DATABASE_BACKEND == "postgresql" else 1
+    read_val = True
     exists = db.execute(
         text(
             """
@@ -1163,7 +1052,6 @@ def get_my_card(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
     _require_role(current, ROLE_PASSENGER)
 
@@ -1219,7 +1107,6 @@ def present_card(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
     _require_role(current, ROLE_PASSENGER)
 
@@ -1277,7 +1164,6 @@ def issuer_pending_documents(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
 
     is_agent = has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
@@ -1332,7 +1218,6 @@ def university_stats(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
 
     is_agent = has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
@@ -1405,7 +1290,6 @@ def issuer_document_details(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     current = _current_user(authorization, db)
     _require_role(current, ROLE_UNIVERSITY_AGENT)
 
@@ -1438,7 +1322,6 @@ def issuer_approve_document(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     reviewer = _current_user(authorization, db)
     if not has_role(reviewer.get("role"), ROLE_UNIVERSITY_AGENT):
         raise HTTPException(status_code=403, detail="Acces interzis")
@@ -1456,7 +1339,7 @@ def issuer_approve_document(
 
     # Cross-university check: agent can only approve documents from their own university
     agent_univ_row = db.execute(
-        text("SELECT name FROM universities WHERE university_id = (SELECT issuer_id FROM users WHERE user_id = :uid)"),
+        text("SELECT name FROM universities WHERE university_id = (SELECT university_id FROM users WHERE user_id = :uid)"),
         {"uid": reviewer["user_id"]},
     ).first()
     if agent_univ_row:
@@ -1525,6 +1408,17 @@ def issuer_approve_document(
         },
     )
 
+    # Resolve issuer_id: agentii universitari au users.issuer_id setat catre universitatea lor;
+    # fallback la "Railway Digital Identity Authority" daca lipseste.
+    issuer_row = db.execute(
+        text("SELECT issuer_id FROM users WHERE user_id = :uid"),
+        {"uid": reviewer["user_id"]},
+    ).first()
+    credential_issuer_id = (
+        issuer_row[0] if issuer_row and issuer_row[0] is not None
+        else _ensure_default_issuer(db)
+    )
+
     db.execute(
         text(
             """
@@ -1535,7 +1429,7 @@ def issuer_approve_document(
         {
             "user_id": doc["user_id"],
             "credential_type": credential_type,
-            "issuer_id": reviewer["user_id"],
+            "issuer_id": credential_issuer_id,
             "valid_until": _academic_year_end(),
         },
     )
@@ -1564,7 +1458,6 @@ def issuer_reject_document(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     reviewer = _current_user(authorization, db)
     if not has_role(reviewer.get("role"), ROLE_UNIVERSITY_AGENT):
         raise HTTPException(status_code=403, detail="Acces interzis")
@@ -1582,7 +1475,7 @@ def issuer_reject_document(
 
     # Cross-university check
     agent_univ_row = db.execute(
-        text("SELECT name FROM universities WHERE university_id = (SELECT issuer_id FROM users WHERE user_id = :uid)"),
+        text("SELECT name FROM universities WHERE university_id = (SELECT university_id FROM users WHERE user_id = :uid)"),
         {"uid": reviewer["user_id"]},
     ).first()
     if agent_univ_row:
@@ -1633,7 +1526,6 @@ def issuer_credentials(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     reviewer = _current_user(authorization, db)
     _require_role(reviewer, ROLE_UNIVERSITY_AGENT)
 
@@ -1658,7 +1550,6 @@ def issuer_revoke_credential(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     reviewer = _current_user(authorization, db)
     _require_role(reviewer, ROLE_UNIVERSITY_AGENT)
 
@@ -1687,7 +1578,6 @@ def train_verify(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     verifier = _current_user(authorization, db)
     _require_role(verifier, ROLE_TRAIN_VERIFIER)
 
@@ -1850,7 +1740,6 @@ def train_history(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    _ensure_identity_tables(db)
     verifier = _current_user(authorization, db)
     _require_role(verifier, ROLE_TRAIN_VERIFIER)
 

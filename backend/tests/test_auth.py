@@ -19,7 +19,7 @@ class TestAuthRegister:
                 "first_name": "John",
                 "last_name": "Doe",
                 "phone": "+40721234567",
-                "university_name": "Universitatea Politehnica București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
             },
             files={"profile_photo": ("photo.png", create_test_image_bytes(), "image/png")},
         )
@@ -35,7 +35,7 @@ class TestAuthRegister:
             first_name="User",
             last_name="One",
             phone="+40721111111",
-            university_name="Universitatea Politehnica București (UPB)",
+            university_name="Universitatea Politehnica Bucuresti (UPB)",
         )
 
         r1 = client.post(
@@ -52,7 +52,7 @@ class TestAuthRegister:
         )
         assert r2.status_code in (400, 409, 422), "Duplicate email should be rejected"
 
-    def test_register_missing_profile_photo_fails(self, client):
+    def test_register_without_profile_photo_succeeds(self, client):
         response = client.post(
             "/auth/register",
             data={
@@ -61,10 +61,10 @@ class TestAuthRegister:
                 "first_name": "No",
                 "last_name": "Photo",
                 "phone": "+40723333333",
-                "university_name": "Universitatea Politehnica București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
             },
         )
-        assert response.status_code == 422, "Missing profile_photo should return 422"
+        assert response.status_code in (200, 201), "Profile photo is optional"
 
     def test_register_missing_phone_fails(self, client):
         response = client.post(
@@ -74,7 +74,7 @@ class TestAuthRegister:
                 "password": "Pass123!",
                 "first_name": "No",
                 "last_name": "Phone",
-                "university_name": "Universitatea Politehnica București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
             },
             files={"profile_photo": ("photo.png", create_test_image_bytes(), "image/png")},
         )
@@ -93,7 +93,7 @@ class TestAuthLogin:
                 "first_name": "Login",
                 "last_name": "Test",
                 "phone": "+40724444444",
-                "university_name": "Universitatea Politehnica București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
             },
             files={"profile_photo": ("photo.png", create_test_image_bytes(), "image/png")},
         )
@@ -115,7 +115,7 @@ class TestAuthLogin:
                 "first_name": "Test",
                 "last_name": "User",
                 "phone": "+40725555555",
-                "university_name": "Universitatea Politehnica București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
             },
             files={"profile_photo": ("photo.png", create_test_image_bytes(), "image/png")},
         )

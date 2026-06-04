@@ -27,7 +27,7 @@ def register_and_login(client, prefix: str) -> str:
             "first_name": "Test",
             "last_name": "User",
             "phone": "+40721000000",
-            "university_name": "Universitatea Politehnica București (UPB)",
+            "university_name": "Universitatea Politehnica Bucuresti (UPB)",
         },
         files={"profile_photo": ("photo.png", create_test_image_bytes(), "image/png")},
     )

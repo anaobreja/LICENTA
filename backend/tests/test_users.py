@@ -63,7 +63,7 @@ class TestPasswordChange:
                 "first_name": "Pwd",
                 "last_name": "Test",
                 "phone": "+40721000001",
-                "university_name": "Universitatea Politehnica București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
             },
             files={"profile_photo": ("photo.png", create_test_image_bytes(), "image/png")},
         )
@@ -154,7 +154,7 @@ class TestExportAndDelete:
                 "first_name": "Del",
                 "last_name": "User",
                 "phone": "+40721000002",
-                "university_name": "Universitatea Politehnica București (UPB)",
+                "university_name": "Universitatea Politehnica Bucuresti (UPB)",
             },
             files={"profile_photo": ("photo.png", create_test_image_bytes(), "image/png")},
         )

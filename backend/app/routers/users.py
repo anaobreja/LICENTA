@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.core.database import DATABASE_BACKEND, SessionLocal
+from app.core.database import SessionLocal
 from app.core.security import decode_token, hash_password, verify_password
 from app.core.uploads import save_uploaded_image
 from app.core.roles import (
@@ -321,7 +321,7 @@ def export_me(authorization: str | None = Header(default=None), db: Session = De
 def delete_me(authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
     user_id = _current_user_id(authorization, db)
 
-    inactive = False if DATABASE_BACKEND == "postgresql" else 0
+    inactive = False
     db.execute(
         text("UPDATE users SET is_active = :inactive, updated_at = CURRENT_TIMESTAMP WHERE user_id = :user_id"),
         {"inactive": inactive, "user_id": user_id},
