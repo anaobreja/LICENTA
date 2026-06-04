@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 import secrets
 import base64
 from io import BytesIO
@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.database import DATABASE_BACKEND, SessionLocal
+from app.core.uploads import save_uploaded_image
 from app.core.security import decode_token
 from app.core.roles import (
     ROLE_PASSENGER,
@@ -24,7 +25,26 @@ from app.core.roles import (
 
 router = APIRouter(tags=["identity"])
 
+
+def _academic_year_end() -> datetime:
+    """Returnează 30 septembrie al sfârșitului anului universitar curent.
+    An universitar: 1 oct → 30 sep.
+    Dacă suntem în oct-dec, noul an a început → end = sep următor.
+    """
+    today = date.today()
+    year = today.year + 1 if today.month >= 10 else today.year
+    return datetime(year, 9, 30, 23, 59, 59, tzinfo=timezone.utc)
+
+
+def _renewal_open() -> bool:
+    """Reînnoirea e deschisă din 1 august până la expirarea credențialelor."""
+    today = date.today()
+    year_end = _academic_year_end().year
+    # Fereastra: 1 august → 30 septembrie al anului de expirare
+    return today >= date(year_end, 8, 1)
+
 UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads" / "documents"
+PROFILE_UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads" / "profiles"
 
 # ---------------------------------------------------------------------------
 # OCR / MRZ helpers
@@ -193,7 +213,7 @@ class ReviewRequest(BaseModel):
 
 
 class CardPresentationCreateRequest(BaseModel):
-    ttl_seconds: int = Field(default=120, ge=30, le=600)
+    ttl_seconds: int = Field(default=180, ge=30, le=600)
 
 
 class VerifyCardPresentationRequest(BaseModel):
@@ -273,7 +293,8 @@ _IDENTITY_TABLES_DDL = [
         ci_number VARCHAR(50),
         ci_name VARCHAR(200),
         ci_date_of_birth VARCHAR(20),
-        ci_sex CHAR(1)
+        ci_sex CHAR(1),
+        ci_address VARCHAR(300)
     )
     """,
     """
@@ -414,7 +435,7 @@ def _issue_card_if_missing(db: Session, user_id: int):
             "user_id": user_id,
             "issuer_id": issuer_id,
             "card_identifier": card_identifier,
-            "valid_until": datetime.now(timezone.utc) + timedelta(days=365),
+            "valid_until": _academic_year_end(),
         },
     )
     db.commit()
@@ -471,27 +492,15 @@ def _normalize_user_credentials_state(db: Session, user_id: int):
 
 
 def _save_uploaded_document_photo(photo: UploadFile) -> str:
-    if photo.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail="Doar imagini JPG, PNG sau WEBP sunt acceptate",
-        )
+    return save_uploaded_image(photo, UPLOAD_DIR, prefix="doc")
 
-    ext = Path(photo.filename or "photo").suffix.lower()
-    if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
-        ext = ".jpg"
 
-    payload = photo.file.read()
-    if not payload:
-        raise HTTPException(status_code=400, detail="Fisierul incarcat este gol")
-    if len(payload) > MAX_PHOTO_SIZE_BYTES:
-        raise HTTPException(status_code=400, detail="Fisierul depaseste 5MB")
+def _save_uploaded_profile_photo(photo: UploadFile) -> str:
+    return save_uploaded_image(photo, PROFILE_UPLOAD_DIR, prefix="profile")
 
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    file_name = f"doc_{uuid4().hex}{ext}"
-    file_path = UPLOAD_DIR / file_name
-    file_path.write_bytes(payload)
-    return str(file_path)
+
+def _upload_has_file(photo: UploadFile | None) -> bool:
+    return bool(photo and photo.filename)
 
 
 def _build_qr_data_url(token_value: str) -> str:
@@ -529,27 +538,29 @@ def _insert_source_document(
     document_type: str,
     document_number_masked: str,
     document_image_path: str | None,
+    document_image_path_verso: str | None = None,
     university_name: str | None = None,
     year_of_study: int | None = None,
     ci_number: str | None = None,
     ci_name: str | None = None,
     ci_date_of_birth: str | None = None,
     ci_sex: str | None = None,
+    ci_address: str | None = None,
 ):
     row = db.execute(
         text(
             """
             INSERT INTO source_documents
                 (user_id, document_type, document_number_masked, document_image_path,
-                 status, university_name, year_of_study,
-                 ci_number, ci_name, ci_date_of_birth, ci_sex)
+                 document_image_path_verso, status, university_name, year_of_study,
+                 ci_number, ci_name, ci_date_of_birth, ci_sex, ci_address)
             VALUES
                 (:user_id, :document_type, :document_number_masked, :document_image_path,
-                 'pending', :university_name, :year_of_study,
-                 :ci_number, :ci_name, :ci_date_of_birth, :ci_sex)
+                 :document_image_path_verso, 'pending', :university_name, :year_of_study,
+                 :ci_number, :ci_name, :ci_date_of_birth, :ci_sex, :ci_address)
             RETURNING id, user_id, document_type, document_number_masked, document_image_path,
-                      status, uploaded_at, university_name, year_of_study,
-                      ci_number, ci_name, ci_date_of_birth, ci_sex
+                      document_image_path_verso, status, uploaded_at, university_name, year_of_study,
+                      ci_number, ci_name, ci_date_of_birth, ci_sex, ci_address
             """
         ),
         {
@@ -557,12 +568,14 @@ def _insert_source_document(
             "document_type": document_type,
             "document_number_masked": document_number_masked,
             "document_image_path": document_image_path,
+            "document_image_path_verso": document_image_path_verso,
             "university_name": university_name or None,
             "year_of_study": year_of_study or None,
             "ci_number": ci_number or None,
             "ci_name": ci_name or None,
             "ci_date_of_birth": ci_date_of_birth or None,
             "ci_sex": ci_sex or None,
+            "ci_address": ci_address or None,
         },
     ).mappings().first()
     return dict(row)
@@ -581,6 +594,16 @@ def _user_has_pending_documents(db: Session, user_id: int) -> bool:
         {"user_id": user_id},
     ).mappings().first()
     return row is not None
+
+
+def _calculate_age(dob_str: str) -> int | None:
+    try:
+        from datetime import date
+        dob = date.fromisoformat(dob_str.strip())
+        today = date.today()
+        return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    except Exception:
+        return None
 
 
 def _user_has_active_credentials(db: Session, user_id: int) -> bool:
@@ -775,13 +798,16 @@ def create_document_with_photo(
 def submit_identity_validation_request(
     legitimation_type: str = Form(...),
     legitimation_number_masked: str = Form(...),
-    legitimation_photo: UploadFile | None = File(default=None),
+    legitimation_photo_front: UploadFile | None = File(default=None),
+    legitimation_photo_verso: UploadFile | None = File(default=None),
+    profile_photo: UploadFile | None = File(default=None),
     university_name: str = Form(default=""),
     year_of_study: str = Form(default="0"),
     ci_number: str = Form(default=""),
     ci_name: str = Form(default=""),
     ci_date_of_birth: str = Form(default=""),
     ci_sex: str = Form(default=""),
+    ci_address: str = Form(default=""),
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
@@ -796,53 +822,120 @@ def submit_identity_validation_request(
             detail="Tipul de legitimație acceptat este student_card.",
         )
 
+    if ci_date_of_birth and ci_date_of_birth.strip():
+        age = _calculate_age(ci_date_of_birth.strip())
+        if age is not None and age >= 30:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Nu poți beneficia de reducerea studențească — vârsta ({age} ani) depășește limita de 30 de ani prevăzută de CFR.",
+            )
+
+    # Cerere pending existentă (modificare)
     pending_docs = db.execute(
         text(
             """
-            SELECT id
+            SELECT id, document_image_path, document_image_path_verso
             FROM source_documents
             WHERE user_id = :user_id AND status = 'pending'
+            ORDER BY uploaded_at DESC
             """
         ),
         {"user_id": current["user_id"]},
     ).mappings().all()
 
     is_modification = len(pending_docs) > 0
+    existing_front: str | None = pending_docs[0].get("document_image_path") if pending_docs else None
+    existing_verso: str | None = pending_docs[0].get("document_image_path_verso") if pending_docs else None
 
-    # Blochează doar cererile NOI când există credențiale active;
-    # modificarea unei cereri deja deschise este permisă întotdeauna.
-    if not is_modification and _user_has_active_credentials(db, current["user_id"]):
+    # Document aprobat anterior → reînnoire anuală
+    approved_doc = db.execute(
+        text(
+            """
+            SELECT id, ci_number, ci_name, ci_date_of_birth, ci_sex, ci_address
+            FROM source_documents
+            WHERE user_id = :user_id AND status = 'approved'
+            ORDER BY uploaded_at DESC
+            LIMIT 1
+            """
+        ),
+        {"user_id": current["user_id"]},
+    ).mappings().first()
+
+    is_renewal = approved_doc is not None
+
+    # Prima cerere: blocare dacă are deja credențiale active
+    if not is_renewal and not is_modification and _user_has_active_credentials(db, current["user_id"]):
         raise HTTPException(
             status_code=400,
-            detail="Ai credentiale active. Nu poti depune o noua cerere.",
+            detail="Ai credentiale active. Nu poti depune o noua cerere initiala.",
+        )
+
+    # Reînnoire: verifică fereastra de timp (disponibilă din 1 august)
+    if is_renewal and not is_modification:
+        has_active = _user_has_active_credentials(db, current["user_id"])
+        if has_active and not _renewal_open():
+            year_end = _academic_year_end().year
+            raise HTTPException(
+                status_code=400,
+                detail=f"Reînnoirea va fi disponibilă începând cu 1 august {year_end}.",
+            )
+
+    # La reînnoire: preia automat datele CI din cererea aprobată anterior
+    if is_renewal and approved_doc:
+        ci_number = ci_number or approved_doc.get("ci_number") or ""
+        ci_name = ci_name or approved_doc.get("ci_name") or ""
+        ci_date_of_birth = ci_date_of_birth or approved_doc.get("ci_date_of_birth") or ""
+        ci_sex = ci_sex or approved_doc.get("ci_sex") or ""
+        ci_address = ci_address or approved_doc.get("ci_address") or ""
+
+    # Poză de profil
+    user_profile_row = db.execute(
+        text("SELECT profile_photo_path FROM users WHERE user_id = :uid"),
+        {"uid": current["user_id"]},
+    ).mappings().first()
+    has_profile = bool(user_profile_row and user_profile_row.get("profile_photo_path"))
+
+    if _upload_has_file(profile_photo):
+        new_profile_path = _save_uploaded_profile_photo(profile_photo)
+        db.execute(
+            text(
+                """
+                UPDATE users
+                SET profile_photo_path = :path, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = :user_id
+                """
+            ),
+            {"path": new_profile_path, "user_id": current["user_id"]},
+        )
+        has_profile = True
+    elif not has_profile and not is_renewal and not is_modification:
+        raise HTTPException(
+            status_code=400,
+            detail="Incarca fotografia de profil (obligatorie la prima cerere).",
+        )
+
+    if _upload_has_file(legitimation_photo_front):
+        legitimation_front_path = _save_uploaded_document_photo(legitimation_photo_front)
+    else:
+        legitimation_front_path = existing_front
+
+    if _upload_has_file(legitimation_photo_verso):
+        legitimation_verso_path = _save_uploaded_document_photo(legitimation_photo_verso)
+    else:
+        legitimation_verso_path = existing_verso
+
+    if not legitimation_front_path or not legitimation_verso_path:
+        raise HTTPException(
+            status_code=400,
+            detail="Incarca ambele poze ale legitimatiei: fata si verso (verso = semnatura).",
         )
 
     if pending_docs:
         for doc_row in pending_docs:
             db.execute(
-                text(
-                    """
-                    DELETE FROM source_documents
-                    WHERE id = :document_id
-                    """
-                ),
+                text("DELETE FROM source_documents WHERE id = :document_id"),
                 {"document_id": doc_row["id"]},
             )
-
-    # Dacă e modificare și nu s-a trimis poză nouă, păstrează poza existentă
-    existing_photo_path: str | None = None
-    if is_modification and (not legitimation_photo or not legitimation_photo.filename):
-        existing_row = db.execute(
-            text("SELECT document_image_path FROM source_documents WHERE user_id = :uid AND status = 'pending' LIMIT 1"),
-            {"uid": current["user_id"]},
-        ).first()
-        if existing_row:
-            existing_photo_path = existing_row[0]
-
-    if legitimation_photo and legitimation_photo.filename:
-        legitimation_path = _save_uploaded_document_photo(legitimation_photo)
-    else:
-        legitimation_path = existing_photo_path
 
     try:
         _safe_year = int(year_of_study)
@@ -856,13 +949,15 @@ def submit_identity_validation_request(
         user_id=current["user_id"],
         document_type=legitimation_type,
         document_number_masked=legitimation_number_masked,
-        document_image_path=legitimation_path,
+        document_image_path=legitimation_front_path,
+        document_image_path_verso=legitimation_verso_path,
         university_name=university_name.strip() or None,
         year_of_study=_safe_year,
         ci_number=ci_number.strip() or None,
         ci_name=ci_name.strip() or None,
         ci_date_of_birth=ci_date_of_birth.strip() or None,
         ci_sex=ci_sex.strip() or None,
+        ci_address=ci_address.strip() or None,
     )
 
     db.commit()
@@ -877,7 +972,8 @@ def submit_identity_validation_request(
         "documents": [
             {
                 **legitimation_doc,
-                "has_photo": True,
+                "has_photo": bool(legitimation_doc.get("document_image_path")),
+                "has_photo_verso": bool(legitimation_doc.get("document_image_path_verso")),
             },
         ],
     }
@@ -886,6 +982,7 @@ def submit_identity_validation_request(
 @router.get("/documents/{document_id}/photo")
 def get_document_photo(
     document_id: int,
+    side: str = "front",
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
@@ -895,7 +992,7 @@ def get_document_photo(
     row = db.execute(
         text(
             """
-            SELECT id, user_id, document_image_path
+            SELECT id, user_id, document_image_path, document_image_path_verso
             FROM source_documents
             WHERE id = :document_id
             """
@@ -910,15 +1007,20 @@ def get_document_photo(
         current["user_id"] == row["user_id"]
         or has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
         or has_role(current.get("role"), ROLE_TRAIN_VERIFIER)
-        or has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
     )
     if not can_access:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    if not row["document_image_path"]:
-        raise HTTPException(status_code=404, detail="No photo uploaded")
+    side_norm = (side or "front").strip().lower()
+    if side_norm == "verso":
+        image_path = row.get("document_image_path_verso")
+    else:
+        image_path = row.get("document_image_path")
 
-    file_path = Path(row["document_image_path"])
+    if not image_path:
+        raise HTTPException(status_code=404, detail="No photo uploaded for this side")
+
+    file_path = Path(image_path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Photo file not found")
 
@@ -938,8 +1040,8 @@ def list_my_documents(
         text(
             """
             SELECT id, document_type, document_number_masked, document_image_path,
-                   status, uploaded_at, university_name, year_of_study,
-                   ci_number, ci_name, ci_date_of_birth, ci_sex
+                   document_image_path_verso, status, uploaded_at, university_name, year_of_study,
+                   ci_number, ci_name, ci_date_of_birth, ci_sex, ci_address
             FROM source_documents
             WHERE user_id = :user_id
             ORDER BY uploaded_at DESC
@@ -952,6 +1054,7 @@ def list_my_documents(
         {
             **dict(r),
             "has_photo": bool(r["document_image_path"]),
+            "has_photo_verso": bool(r.get("document_image_path_verso")),
         }
         for r in rows
     ]
@@ -1190,8 +1293,9 @@ def issuer_pending_documents(
     query = """
         SELECT d.id, d.user_id, u.first_name, u.last_name, u.email,
                d.document_type, d.document_number_masked, d.document_image_path,
-               d.uploaded_at, d.university_name, d.year_of_study,
-               d.ci_number, d.ci_name, d.ci_date_of_birth, d.ci_sex
+               d.document_image_path_verso, d.uploaded_at, d.university_name, d.year_of_study,
+               d.ci_number, d.ci_name, d.ci_date_of_birth, d.ci_sex, d.ci_address,
+               u.profile_photo_path
         FROM source_documents d
         JOIN users u ON u.user_id = d.user_id
         WHERE d.status = 'pending'
@@ -1212,6 +1316,8 @@ def issuer_pending_documents(
         {
             **dict(r),
             "has_photo": bool(r["document_image_path"]),
+            "has_photo_verso": bool(r.get("document_image_path_verso")),
+            "has_profile_photo": bool(r.get("profile_photo_path")),
         }
         for r in rows
     ]
@@ -1416,7 +1522,7 @@ def issuer_approve_document(
             "user_id": doc["user_id"],
             "credential_type": credential_type,
             "issuer_id": reviewer["user_id"],
-            "valid_until": datetime.now(timezone.utc) + timedelta(days=365),
+            "valid_until": _academic_year_end(),
         },
     )
 
@@ -1620,9 +1726,13 @@ def train_verify(
     holder = db.execute(
         text(
             """
-            SELECT user_id, first_name, last_name
-            FROM users
-            WHERE user_id = :user_id
+            SELECT u.user_id, u.first_name, u.last_name,
+                   sd.ci_date_of_birth, sd.ci_address
+            FROM users u
+            LEFT JOIN source_documents sd
+                ON sd.user_id = u.user_id AND sd.status = 'approved'
+            WHERE u.user_id = :user_id
+            LIMIT 1
             """
         ),
         {"user_id": pres["user_id"]},
@@ -1655,13 +1765,13 @@ def train_verify(
         message=verification_message,
     )
 
-    # Try to find latest identity document for this user (for photo display)
     doc_row = db.execute(
         text(
             """
-            SELECT id, document_image_path
+            SELECT id, document_image_path, document_image_path_verso
             FROM source_documents
-            WHERE user_id = :user_id AND document_type = 'identity_card' AND document_image_path IS NOT NULL
+            WHERE user_id = :user_id AND document_type = 'student_card'
+              AND document_image_path IS NOT NULL
             ORDER BY uploaded_at DESC
             LIMIT 1
             """
@@ -1670,6 +1780,11 @@ def train_verify(
     ).mappings().first()
 
     identity_document_id = doc_row["id"] if doc_row else None
+    profile_row = db.execute(
+        text("SELECT profile_photo_path FROM users WHERE user_id = :user_id"),
+        {"user_id": pres["user_id"]},
+    ).mappings().first()
+    has_profile_photo = bool(profile_row and profile_row.get("profile_photo_path"))
 
     db.commit()
 
@@ -1685,6 +1800,9 @@ def train_verify(
             "user_id": holder["user_id"],
             "first_name": holder["first_name"],
             "last_name": holder["last_name"],
+            "date_of_birth": holder.get("ci_date_of_birth"),
+            "address": holder.get("ci_address"),
+            "has_profile_photo": has_profile_photo,
         },
         "claims": [dict(c) for c in claims],
         "identity_document_id": identity_document_id,

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { generatePresentation, getMyCard } from '../services/api'
 
-const TTL = 120
+const TTL = 180
 
 function CountdownRing({ secondsLeft, total = TTL }) {
   const R = 54
   const CIRCUMFERENCE = 2 * Math.PI * R
   const dashOffset = CIRCUMFERENCE * (1 - secondsLeft / total)
-  const color = secondsLeft > 40 ? '#10b981' : secondsLeft > 15 ? '#f59e0b' : '#ef4444'
+  const color = secondsLeft > 60 ? '#10b981' : secondsLeft > 20 ? '#f59e0b' : '#ef4444'
   return (
     <svg width="130" height="130" className="absolute inset-0 -rotate-90">
       <circle cx="65" cy="65" r={R} fill="none" stroke="#1e293b" strokeWidth="8" />
@@ -67,7 +67,7 @@ export default function PresentIdentity() {
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
-  const ringColor = secondsLeft > 40 ? 'text-emerald-400' : secondsLeft > 15 ? 'text-amber-400' : 'text-red-400'
+  const ringColor = secondsLeft > 60 ? 'text-emerald-400' : secondsLeft > 20 ? 'text-amber-400' : 'text-red-400'
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">

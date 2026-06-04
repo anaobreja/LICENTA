@@ -1,6 +1,7 @@
 from datetime import timedelta
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -17,21 +18,17 @@ from app.core.security import (
     verify_totp_code,
 )
 from app.core.roles import normalize_role
+from app.core.uploads import save_uploaded_image
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+PROFILE_UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads" / "profiles"
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=4, max_length=128)
     totp_code: str | None = Field(default=None, max_length=16)
-
-
-class RegisterRequest(BaseModel):
-    first_name: str = Field(min_length=2, max_length=100)
-    last_name: str = Field(min_length=2, max_length=100)
-    email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
 
 
 class MFAEnableRequest(BaseModel):
@@ -84,10 +81,23 @@ def _account_active(value) -> bool:
 
 
 @router.post("/register")
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+def register(
+    first_name: str = Form(..., min_length=2, max_length=100),
+    last_name: str = Form(..., min_length=2, max_length=100),
+    email: str = Form(...),
+    password: str = Form(..., min_length=6, max_length=128),
+    phone: str = Form(..., min_length=8, max_length=30),
+    university_name: str = Form(default=""),
+    profile_photo: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+):
+    email_normalized = email.strip().lower()
+    if "@" not in email_normalized:
+        raise HTTPException(status_code=400, detail="Adresa de email nu este valida")
+
     existing = db.execute(
         text("SELECT user_id FROM users WHERE email = :email"),
-        {"email": payload.email.lower()},
+        {"email": email_normalized},
     ).first()
 
     if existing:
@@ -96,28 +106,46 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
             detail="Email already registered",
         )
 
-    password_hash = hash_password(payload.password)
+    phone_clean = phone.strip()
+    if not phone_clean:
+        raise HTTPException(status_code=400, detail="Telefonul este obligatoriu")
+    university_clean = university_name.strip()
+
+    profile_path = save_uploaded_image(profile_photo, PROFILE_UPLOAD_DIR, prefix="profile") if profile_photo and profile_photo.filename else None
+    password_hash = hash_password(password)
+
+    is_active = 1 if DATABASE_BACKEND == "sqlite" else True
 
     created = db.execute(
         text(
             """
-            INSERT INTO users (first_name, last_name, email, password_hash, role, is_active)
-            VALUES (:first_name, :last_name, :email, :password_hash, 'passenger', true)
-            RETURNING user_id, first_name, last_name, email, role
+            INSERT INTO users (
+                first_name, last_name, email, password_hash, phone,
+                university_name, profile_photo_path, role, is_active
+            )
+            VALUES (
+                :first_name, :last_name, :email, :password_hash, :phone,
+                :university_name, :profile_photo_path, 'passenger', :is_active
+            )
+            RETURNING user_id, first_name, last_name, email, role, phone, university_name
             """
         ),
         {
-            "first_name": payload.first_name,
-            "last_name": payload.last_name,
-            "email": payload.email.lower(),
+            "first_name": first_name.strip(),
+            "last_name": last_name.strip(),
+            "email": email_normalized,
             "password_hash": password_hash,
+            "phone": phone_clean,
+            "university_name": university_clean,
+            "profile_photo_path": profile_path,
+            "is_active": is_active,
         },
     ).mappings().first()
 
     db.commit()
 
     return {
-        "message": "Account created successfully",
+        "message": "Cont creat cu succes. Completeaza cererea de validare din Documente.",
         "user": {**dict(created), "role": normalize_role(created["role"])},
     }
 

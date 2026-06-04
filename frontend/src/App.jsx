@@ -148,13 +148,13 @@ function App() {
             }
           />
 
-          <Route 
-            path="/profile" 
+          <Route
+            path="/profile"
             element={
-              <ProtectedRoute isAuthenticated={isAuthenticated} user={user} role="passenger">
+              <ProtectedRoute isAuthenticated={isAuthenticated} user={user}>
                 <Profile user={user} onAccountDeleted={handleLogout} />
               </ProtectedRoute>
-            } 
+            }
           />
 
           <Route

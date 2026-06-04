@@ -1,9 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, Sector,
 } from 'recharts'
-import { getIssuerPendingDocuments, approveIssuerDocument, rejectIssuerDocument, getDocumentPhotoBlobUrl } from '../services/api'
+import {
+  getIssuerPendingDocuments,
+  approveIssuerDocument,
+  rejectIssuerDocument,
+  getDocumentPhotoBlobUrl,
+  getUserProfilePhotoBlobUrl,
+} from '../services/api'
 
 const YEAR_COLORS = ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444']
 
@@ -46,6 +52,7 @@ export default function UniversityAgentDashboard() {
   const [workingId, setWorkingId] = useState(null)
   const [rejectDialog, setRejectDialog] = useState({ open: false, id: null, notes: '' })
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewLabel, setPreviewLabel] = useState('')
   const [error, setError] = useState('')
 
   const loadAll = async (year = null) => {
@@ -75,13 +82,54 @@ export default function UniversityAgentDashboard() {
     finally { setWorkingId(null) }
   }
 
-  const onPreview = async (doc) => {
+  const showPreview = (url, label) => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(url)
+    setPreviewLabel(label)
+  }
+
+  const onPreviewFront = async (doc) => {
     if (!doc.has_photo) return
-    try { setPreviewUrl(await getDocumentPhotoBlobUrl(doc.id)) }
+    try { showPreview(await getDocumentPhotoBlobUrl(doc.id, 'front'), 'Legitimație — față') }
+    catch (e) { setError(e.message) }
+  }
+
+  const onPreviewVerso = async (doc) => {
+    if (!doc.has_photo_verso) return
+    try { showPreview(await getDocumentPhotoBlobUrl(doc.id, 'verso'), 'Legitimație — verso (semnătură)') }
+    catch (e) { setError(e.message) }
+  }
+
+  const onPreviewProfile = async (doc) => {
+    if (!doc.has_profile_photo) return
+    try { showPreview(await getUserProfilePhotoBlobUrl(doc.user_id), 'Fotografie profil') }
     catch (e) { setError(e.message) }
   }
 
   const yearLabel = (y) => y <= 4 ? `Licență ${y}` : `Master ${y - 4}`
+
+function DocProfilePhoto({ userId, hasPhoto }) {
+  const [url, setUrl] = useState(null)
+  const activeRef = useRef(true)
+
+  useEffect(() => {
+    activeRef.current = true
+    if (!hasPhoto || !userId) { setUrl(null); return }
+    getUserProfilePhotoBlobUrl(userId)
+      .then(u => { if (activeRef.current) setUrl(u) })
+      .catch(() => {})
+    return () => { activeRef.current = false }
+  }, [userId, hasPhoto])
+
+  return (
+    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+      {url
+        ? <img src={url} alt="profil" className="w-full h-full object-cover" />
+        : <span className="text-2xl text-slate-400">👤</span>
+      }
+    </div>
+  )
+}
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -171,10 +219,13 @@ export default function UniversityAgentDashboard() {
           <div className="space-y-4">
             {docs.map(doc => (
               <div key={doc.id} className="rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-950 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-                  <div>
-                    <div className="font-bold text-slate-900 dark:text-slate-100">{doc.first_name} {doc.last_name}</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">{doc.email}</div>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3">
+                    <DocProfilePhoto userId={doc.user_id} hasPhoto={doc.has_profile_photo} />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-slate-100">{doc.first_name} {doc.last_name}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">{doc.email}</div>
+                    </div>
                   </div>
                   {doc.year_of_study && (
                     <span className="text-xs font-bold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-full">
@@ -190,6 +241,7 @@ export default function UniversityAgentDashboard() {
                     {doc.ci_number && <div className="text-slate-500">Nr CI: <strong className="text-slate-800 dark:text-slate-200">{doc.ci_number}</strong></div>}
                     {doc.ci_date_of_birth && <div className="text-slate-500">Data nașterii: <strong className="text-slate-800 dark:text-slate-200">{doc.ci_date_of_birth}</strong></div>}
                     {doc.ci_sex && <div className="text-slate-500">Sex: <strong className="text-slate-800 dark:text-slate-200">{doc.ci_sex === 'M' ? 'Masculin' : 'Feminin'}</strong></div>}
+                    {doc.ci_address && <div className="text-slate-500 col-span-2">Domiciliu: <strong className="text-slate-800 dark:text-slate-200">{doc.ci_address}</strong></div>}
                   </div>
                 )}
 
@@ -199,9 +251,19 @@ export default function UniversityAgentDashboard() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
+                  {doc.has_profile_photo && (
+                    <button type="button" onClick={() => onPreviewProfile(doc)} className="text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200 px-3 py-1.5 rounded-lg">
+                      👤 Profil
+                    </button>
+                  )}
                   {doc.has_photo && (
-                    <button onClick={() => onPreview(doc)} className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700">
-                      📷 Vezi poza
+                    <button type="button" onClick={() => onPreviewFront(doc)} className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700">
+                      📷 Față
+                    </button>
+                  )}
+                  {doc.has_photo_verso && (
+                    <button type="button" onClick={() => onPreviewVerso(doc)} className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700">
+                      📷 Verso
                     </button>
                   )}
                   <button onClick={() => onApprove(doc.id)} disabled={workingId === doc.id} className="text-xs bg-emerald-600 text-white px-4 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-60 font-semibold">
@@ -233,8 +295,12 @@ export default function UniversityAgentDashboard() {
 
       {/* Photo preview */}
       {previewUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => { URL.revokeObjectURL(previewUrl); setPreviewUrl(null) }}>
-          <img src={previewUrl} alt="Legitimație" className="max-w-lg max-h-[80vh] rounded-2xl shadow-2xl border-4 border-white" />
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70 p-4"
+          onClick={() => { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); setPreviewLabel('') }}
+        >
+          {previewLabel && <p className="text-white font-semibold mb-3">{previewLabel}</p>}
+          <img src={previewUrl} alt={previewLabel || 'Previzualizare'} className="max-w-lg max-h-[80vh] rounded-2xl shadow-2xl border-4 border-white" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </div>

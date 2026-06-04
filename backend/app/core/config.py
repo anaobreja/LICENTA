@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     # Database — implicit SQLite in radacina proiectului (fara PostgreSQL obligatoriu)
     DATABASE_URL: str = f"sqlite:///{_DEFAULT_SQLITE_PATH.as_posix()}"
     
-    # JWT
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    # JWT — citit din .env, NU hardcoded
+    SECRET_KEY: str = "fallback-secret-key-never-use-in-production-change-in-env"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 ore pentru demo
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7

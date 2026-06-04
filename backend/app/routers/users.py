@@ -1,6 +1,8 @@
+from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -8,9 +10,17 @@ from sqlalchemy.orm import Session
 
 from app.core.database import DATABASE_BACKEND, SessionLocal
 from app.core.security import decode_token, hash_password, verify_password
-from app.core.roles import normalize_role
+from app.core.uploads import save_uploaded_image
+from app.core.roles import (
+    ROLE_TRAIN_VERIFIER,
+    ROLE_UNIVERSITY_AGENT,
+    has_role,
+    normalize_role,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+PROFILE_UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads" / "profiles"
 
 
 def get_db():
@@ -82,7 +92,7 @@ def me(authorization: str | None = Header(default=None), db: Session = Depends(g
         text(
             """
             SELECT user_id, first_name, last_name, email, phone, date_of_birth, role, is_active,
-                   mfa_enabled
+                   mfa_enabled, university_name, profile_photo_path
             FROM users
             WHERE user_id = :user_id
             """
@@ -103,9 +113,48 @@ def me(authorization: str | None = Header(default=None), db: Session = Depends(g
         "email": row["email"],
         "phone": row.get("phone"),
         "date_of_birth": row.get("date_of_birth"),
+        "university_name": row.get("university_name"),
+        "has_profile_photo": bool(row.get("profile_photo_path")),
         "role": normalize_role(row["role"]),
         "mfa_enabled": _mfa_enabled_value(row.get("mfa_enabled")),
     }
+
+
+@router.get("/{user_id}/profile-photo")
+def get_user_profile_photo(
+    user_id: int,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    viewer_id = _current_user_id(authorization, db)
+    viewer = db.execute(
+        text("SELECT user_id, role FROM users WHERE user_id = :user_id"),
+        {"user_id": viewer_id},
+    ).mappings().first()
+    if not viewer:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    row = db.execute(
+        text("SELECT user_id, profile_photo_path FROM users WHERE user_id = :user_id"),
+        {"user_id": user_id},
+    ).mappings().first()
+    if not row or not row.get("profile_photo_path"):
+        raise HTTPException(status_code=404, detail="Profile photo not found")
+
+    viewer_role = normalize_role(viewer["role"])
+    can_access = (
+        viewer_id == user_id
+        or has_role(viewer_role, ROLE_UNIVERSITY_AGENT)
+        or has_role(viewer_role, ROLE_TRAIN_VERIFIER)
+    )
+    if not can_access:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    file_path = Path(row["profile_photo_path"])
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Profile photo file not found")
+
+    return FileResponse(path=file_path)
 
 
 @router.put("/me")
@@ -175,6 +224,36 @@ def change_password(
     db.commit()
 
     return {"message": "Password updated"}
+
+
+@router.put("/me/profile-photo")
+def update_profile_photo(
+    profile_photo: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user_id = _current_user_id(authorization, db)
+
+    active_cred = db.execute(
+        text("SELECT id FROM user_credentials WHERE user_id = :uid AND status = 'active' LIMIT 1"),
+        {"uid": user_id},
+    ).mappings().first()
+    if active_cred:
+        raise HTTPException(
+            status_code=403,
+            detail="Poza de profil nu mai poate fi modificată după ce identitatea a fost aprobată.",
+        )
+
+    photo_path = save_uploaded_image(profile_photo, PROFILE_UPLOAD_DIR, prefix="profile")
+    if not photo_path:
+        raise HTTPException(status_code=400, detail="Imaginea nu a putut fi salvată")
+
+    db.execute(
+        text("UPDATE users SET profile_photo_path = :path, updated_at = CURRENT_TIMESTAMP WHERE user_id = :user_id"),
+        {"path": str(photo_path), "user_id": user_id},
+    )
+    db.commit()
+    return {"message": "Poza de profil actualizată"}
 
 
 @router.get("/me/export")

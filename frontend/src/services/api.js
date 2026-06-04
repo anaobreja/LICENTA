@@ -82,11 +82,38 @@ export const login = (email, password, totpCode) =>
     }),
   })
 
-export const register = (userData) =>
-  apiCall('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify(userData)
-  })
+export const register = async ({
+  first_name,
+  last_name,
+  email,
+  password,
+  phone,
+  university_name,
+}) => {
+  const url = `${API_BASE_URL}/auth/register`
+  const formData = new FormData()
+  formData.append('first_name', first_name)
+  formData.append('last_name', last_name)
+  formData.append('email', email)
+  formData.append('password', password)
+  formData.append('phone', phone)
+  formData.append('university_name', university_name)
+
+  const response = await fetch(url, { method: 'POST', body: formData })
+  if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}`
+    try {
+      const errorData = await response.json()
+      if (errorData?.detail) {
+        errorMessage = typeof errorData.detail === 'string'
+          ? errorData.detail
+          : JSON.stringify(errorData.detail)
+      }
+    } catch (_) { /* ignore */ }
+    throw new Error(errorMessage)
+  }
+  return response.json()
+}
 
 export const setupMFA = () =>
   apiCall('/auth/mfa/setup', { method: 'POST' })
@@ -169,7 +196,9 @@ export const createDocumentWithPhoto = async ({ document_type, document_number_m
 export const submitIdentityValidationRequest = async ({
   legitimation_type,
   legitimation_number_masked,
-  legitimation_photo,
+  legitimation_photo_front,
+  legitimation_photo_verso,
+  profile_photo,
   university_name = '',
   year_of_study = 0,
   ci_number = '',
@@ -181,7 +210,15 @@ export const submitIdentityValidationRequest = async ({
   const formData = new FormData()
   formData.append('legitimation_type', legitimation_type)
   formData.append('legitimation_number_masked', legitimation_number_masked)
-  formData.append('legitimation_photo', legitimation_photo)
+  if (legitimation_photo_front) {
+    formData.append('legitimation_photo_front', legitimation_photo_front)
+  }
+  if (legitimation_photo_verso) {
+    formData.append('legitimation_photo_verso', legitimation_photo_verso)
+  }
+  if (profile_photo) {
+    formData.append('profile_photo', profile_photo)
+  }
   formData.append('university_name', university_name)
   formData.append('year_of_study', String(isNaN(year_of_study) || !year_of_study ? 0 : year_of_study))
   formData.append('ci_number', ci_number)
@@ -230,8 +267,8 @@ export const rejectIssuerDocument = (documentId, notes = '') =>
     body: JSON.stringify({ notes })
   })
 
-export const getDocumentPhotoBlobUrl = async (documentId) => {
-  const url = `${API_BASE_URL}/documents/${documentId}/photo`
+export const getDocumentPhotoBlobUrl = async (documentId, side = 'front') => {
+  const url = `${API_BASE_URL}/documents/${documentId}/photo?side=${encodeURIComponent(side)}`
   const response = await fetch(url, {
     headers: {
       ...getAuthHeader()
@@ -277,11 +314,37 @@ export const verifyPresentation = (payload) =>
 export const getUserProfile = () =>
   apiCall('/users/me')
 
+export const getUserProfilePhotoBlobUrl = async (userId) => {
+  const url = `${API_BASE_URL}/users/${userId}/profile-photo`
+  const response = await fetch(url, { headers: { ...getAuthHeader() } })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
+}
+
 export const updateProfile = (userData) =>
   apiCall('/users/me', {
     method: 'PUT',
     body: JSON.stringify(userData),
   })
+
+export const updateProfilePhoto = async (file) => {
+  const formData = new FormData()
+  formData.append('profile_photo', file)
+  const url = `${API_BASE_URL}/users/me/profile-photo`
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: { ...getAuthHeader() },
+    body: formData,
+  })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.detail || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
 
 export const changePassword = (currentPassword, newPassword) =>
   apiCall('/users/me/password', {

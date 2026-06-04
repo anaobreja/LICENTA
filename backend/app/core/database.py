@@ -171,6 +171,8 @@ def _initialize_sqlite_identity_tables(connection):
         ("ci_name", "TEXT"),
         ("ci_date_of_birth", "TEXT"),
         ("ci_sex", "TEXT"),
+        ("ci_address", "TEXT"),
+        ("document_image_path_verso", "TEXT"),
     ]:
         try:
             connection.exec_driver_sql(
@@ -314,6 +316,50 @@ def _initialize_sqlite_demo_data(sqlite_engine):
         connection.execute(text("UPDATE users SET university_id = 3 WHERE email = 'agent.unibuc@railwaydemo.com'"))
 
         _initialize_sqlite_identity_tables(connection)
+
+
+def _ensure_source_document_columns(engine, backend: str) -> None:
+    columns = [("document_image_path_verso", "TEXT")]
+    if backend == "sqlite":
+        with engine.begin() as conn:
+            rows = conn.execute(text("PRAGMA table_info(source_documents)")).fetchall()
+            existing = {r[1] for r in rows}
+            for col, col_type in columns:
+                if col not in existing:
+                    conn.execute(text(f"ALTER TABLE source_documents ADD COLUMN {col} {col_type}"))
+    else:
+        try:
+            with engine.begin() as conn:
+                for col, col_type in columns:
+                    conn.execute(
+                        text(f"ALTER TABLE source_documents ADD COLUMN IF NOT EXISTS {col} {col_type}")
+                    )
+        except Exception:
+            pass
+
+
+def _ensure_user_profile_columns(engine, backend: str) -> None:
+    """Add profile photo and university on users when missing."""
+    columns = [
+        ("profile_photo_path", "TEXT"),
+        ("university_name", "TEXT"),
+    ]
+    if backend == "sqlite":
+        with engine.begin() as conn:
+            rows = conn.execute(text("PRAGMA table_info(users)")).fetchall()
+            existing = {r[1] for r in rows}
+            for col, col_type in columns:
+                if col not in existing:
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {col_type}"))
+    else:
+        try:
+            with engine.begin() as conn:
+                for col, col_type in columns:
+                    conn.execute(
+                        text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {col_type}")
+                    )
+        except Exception:
+            pass
 
 
 def _ensure_user_mfa_columns(engine, backend: str) -> None:
@@ -570,6 +616,8 @@ else:
         _attach_sqlite_pragmas(engine)
         _initialize_sqlite_demo_data_with_retry(engine)
 
+_ensure_source_document_columns(engine, DATABASE_BACKEND)
+_ensure_user_profile_columns(engine, DATABASE_BACKEND)
 _ensure_user_mfa_columns(engine, DATABASE_BACKEND)
 
 if DATABASE_BACKEND == "sqlite":
@@ -611,6 +659,19 @@ if DATABASE_BACKEND == "sqlite":
             _conn.execute(text(
                 "UPDATE users SET university_id = :uid WHERE email = :email AND university_id IS NULL"
             ), {"uid": _univ_id, "email": _email})
+
+# Migrare: setează valid_until la 30 septembrie 2026 pentru credențialele existente
+# care au valid_until > 2026-09-30 (setat anterior ca +365 zile arbitrar)
+if DATABASE_BACKEND == "sqlite":
+    with engine.begin() as _conn:
+        _conn.exec_driver_sql(
+            "UPDATE user_credentials SET valid_until = '2026-09-30 23:59:59' "
+            "WHERE valid_until > '2026-09-30 23:59:59' AND status = 'active'"
+        )
+        _conn.exec_driver_sql(
+            "UPDATE digital_cards SET valid_until = '2026-09-30 23:59:59' "
+            "WHERE valid_until > '2026-09-30 23:59:59' AND status = 'active'"
+        )
 
 # Session factory
 SessionLocal = sessionmaker(

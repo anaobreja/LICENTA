@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { getUserProfilePhotoBlobUrl } from '../services/api'
 
 function Navigation({ user, onLogout }) {
   const navigate = useNavigate()
   const [unread, setUnread] = useState(0)
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState(null)
 
   const handleLogout = () => {
     onLogout()
@@ -30,6 +32,18 @@ function Navigation({ user, onLogout }) {
     window.addEventListener('focus', onFocus)
     return () => { clearInterval(id); window.removeEventListener('focus', onFocus) }
   }, [user])
+
+  useEffect(() => {
+    if (!user?.user_id || !user?.has_profile_photo) {
+      setProfilePhotoUrl(null)
+      return
+    }
+    let active = true
+    getUserProfilePhotoBlobUrl(user.user_id)
+      .then(url => { if (active) setProfilePhotoUrl(url) })
+      .catch(() => { if (active) setProfilePhotoUrl(null) })
+    return () => { active = false }
+  }, [user?.user_id, user?.has_profile_photo])
 
   return (
     <nav className="bg-blue-600 text-white shadow-lg dark:bg-slate-900 dark:text-slate-100 border-b border-blue-500/30 dark:border-slate-800">
@@ -70,8 +84,17 @@ function Navigation({ user, onLogout }) {
             <Link to="/settings" className="hover:text-blue-200 font-medium">
               Settings
             </Link>
-            <Link to="/profile" className="hover:text-blue-200 font-medium">
-              {user?.first_name || 'Profile'}
+            <Link to="/profile" className="flex items-center gap-2 hover:opacity-80 transition">
+              <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-white/40 bg-blue-400 dark:bg-slate-700 flex items-center justify-center shrink-0">
+                {profilePhotoUrl ? (
+                  <img src={profilePhotoUrl} alt="profil" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-sm font-bold text-white leading-none">
+                    {(user?.first_name?.[0] || '?').toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <span className="font-medium hidden sm:inline">{user?.first_name || 'Profil'}</span>
             </Link>
             <button
               onClick={handleLogout}

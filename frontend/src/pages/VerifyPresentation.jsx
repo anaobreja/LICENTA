@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { verifyPresentation, getDocumentPhotoBlobUrl } from '../services/api'
+import { verifyPresentation, getDocumentPhotoBlobUrl, getUserProfilePhotoBlobUrl } from '../services/api'
 
 function VerifyPresentation() {
   const readerId = 'verify-qr-reader'
@@ -10,6 +10,7 @@ function VerifyPresentation() {
   const [scanInfo, setScanInfo] = useState('')
   const [result, setResult] = useState(null)
   const [identityPhotoUrl, setIdentityPhotoUrl] = useState(null)
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState(null)
   const [validationTime, setValidationTime] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -50,14 +51,23 @@ function VerifyPresentation() {
         // If backend returned identity document id, fetch the photo
         if (data?.identity_document_id) {
           try {
-            const blobUrl = await getDocumentPhotoBlobUrl(data.identity_document_id)
+            const blobUrl = await getDocumentPhotoBlobUrl(data.identity_document_id, 'front')
             setIdentityPhotoUrl(blobUrl)
           } catch (err) {
-            console.warn('Could not load identity photo', err)
+            console.warn('Could not load legitimatie photo', err)
             setIdentityPhotoUrl(null)
           }
         } else {
           setIdentityPhotoUrl(null)
+        }
+        if (data?.holder?.user_id) {
+          try {
+            setProfilePhotoUrl(await getUserProfilePhotoBlobUrl(data.holder.user_id))
+          } catch {
+            setProfilePhotoUrl(null)
+          }
+        } else {
+          setProfilePhotoUrl(null)
         }
       setValidationTime(new Date().toLocaleString('ro-RO'))
       setError('')
@@ -142,16 +152,11 @@ function VerifyPresentation() {
 
   useEffect(() => {
     mountedRef.current = true
-    // Do not start live scanner automatically on mount.
-    // User can start it manually with the button below.
-
     return () => {
       mountedRef.current = false
       stopAndClearScanner()
     }
   }, [])
-
-
 
   const onVerify = async (e) => {
     e.preventDefault()
@@ -267,6 +272,12 @@ function VerifyPresentation() {
             <p><span className="font-semibold dark:text-slate-100">Card:</span> {result.card.card_identifier}</p>
             <p><span className="font-semibold dark:text-slate-100">Emitent:</span> {result.card.issuer_name}</p>
             <p><span className="font-semibold dark:text-slate-100">Pasager:</span> {result.holder.first_name} {result.holder.last_name}</p>
+            {result.holder.date_of_birth && (
+              <p><span className="font-semibold dark:text-slate-100">Data nașterii:</span> {result.holder.date_of_birth}</p>
+            )}
+            {result.holder.address && (
+              <p><span className="font-semibold dark:text-slate-100">Domiciliu:</span> {result.holder.address}</p>
+            )}
             <p className="mt-3 font-semibold text-slate-900 dark:text-slate-100">Atribute validate</p>
             <ul className="mt-2 space-y-1">
               {result.claims.map((c) => (
@@ -277,10 +288,20 @@ function VerifyPresentation() {
               ))}
             </ul>
           </div>
-          {identityPhotoUrl && (
-            <div className="mt-4">
-              <h3 className="font-semibold dark:text-slate-100 mb-2">Poza legitimatie</h3>
-              <img src={identityPhotoUrl} alt="Poza legitimatie" className="max-w-full rounded-lg border border-slate-200 dark:border-slate-700" />
+          {(profilePhotoUrl || identityPhotoUrl) && (
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {profilePhotoUrl && (
+                <div>
+                  <h3 className="font-semibold dark:text-slate-100 mb-2">Fotografie profil</h3>
+                  <img src={profilePhotoUrl} alt="Profil pasager" className="max-w-full rounded-lg border border-slate-200 dark:border-slate-700" />
+                </div>
+              )}
+              {identityPhotoUrl && (
+                <div>
+                  <h3 className="font-semibold dark:text-slate-100 mb-2">Legitimație — față</h3>
+                  <img src={identityPhotoUrl} alt="Legitimație față" className="max-w-full rounded-lg border border-slate-200 dark:border-slate-700" />
+                </div>
+              )}
             </div>
           )}
         </div>
