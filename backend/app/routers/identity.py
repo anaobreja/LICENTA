@@ -992,9 +992,11 @@ def get_document_photo(
     row = db.execute(
         text(
             """
-            SELECT id, user_id, document_image_path, document_image_path_verso
-            FROM source_documents
-            WHERE id = :document_id
+            SELECT sd.id, sd.user_id, sd.document_image_path, sd.document_image_path_verso,
+                   u.university_name AS owner_university
+            FROM source_documents sd
+            JOIN users u ON u.user_id = sd.user_id
+            WHERE sd.id = :document_id
             """
         ),
         {"document_id": document_id},
@@ -1003,10 +1005,12 @@ def get_document_photo(
     if not row:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    # AUTHORIZATION FIX: only owner and same-university agents can access
+    agent_university = current.get("university_name")
     can_access = (
-        current["user_id"] == row["user_id"]
-        or has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
-        or has_role(current.get("role"), ROLE_TRAIN_VERIFIER)
+        current["user_id"] == row["user_id"]  # Owner can access own documents
+        or (has_role(current.get("role"), ROLE_UNIVERSITY_AGENT) and 
+            agent_university == row["owner_university"])  # Agent only from same university
     )
     if not can_access:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -1440,7 +1444,7 @@ def issuer_approve_document(
         raise HTTPException(status_code=403, detail="Acces interzis")
 
     doc = db.execute(
-        text("SELECT id, user_id, document_type, status FROM source_documents WHERE id = :id"),
+        text("SELECT id, user_id, document_type, status, university_name FROM source_documents WHERE id = :id"),
         {"id": document_id},
     ).mappings().first()
 
@@ -1449,6 +1453,16 @@ def issuer_approve_document(
 
     if doc["status"] != "pending":
         raise HTTPException(status_code=400, detail="Document is not pending")
+
+    # Cross-university check: agent can only approve documents from their own university
+    agent_univ_row = db.execute(
+        text("SELECT name FROM universities WHERE university_id = (SELECT issuer_id FROM users WHERE user_id = :uid)"),
+        {"uid": reviewer["user_id"]},
+    ).first()
+    if agent_univ_row:
+        agent_univ_name = agent_univ_row[0]
+        if doc.get("university_name") != agent_univ_name:
+            raise HTTPException(status_code=403, detail="Nu poți aproba documente de la altă universitate")
 
     credential_type = _credential_type_from_document(doc["document_type"])
     active_same_type = db.execute(
@@ -1556,7 +1570,7 @@ def issuer_reject_document(
         raise HTTPException(status_code=403, detail="Acces interzis")
 
     doc = db.execute(
-        text("SELECT id, user_id, document_type, status FROM source_documents WHERE id = :id"),
+        text("SELECT id, user_id, document_type, status, university_name FROM source_documents WHERE id = :id"),
         {"id": document_id},
     ).mappings().first()
 
@@ -1565,6 +1579,16 @@ def issuer_reject_document(
 
     if doc["status"] != "pending":
         raise HTTPException(status_code=400, detail="Document is not pending")
+
+    # Cross-university check
+    agent_univ_row = db.execute(
+        text("SELECT name FROM universities WHERE university_id = (SELECT issuer_id FROM users WHERE user_id = :uid)"),
+        {"uid": reviewer["user_id"]},
+    ).first()
+    if agent_univ_row:
+        agent_univ_name = agent_univ_row[0]
+        if doc.get("university_name") != agent_univ_name:
+            raise HTTPException(status_code=403, detail="Nu poți respinge documente de la altă universitate")
 
     db.execute(
         text("UPDATE source_documents SET status = 'rejected' WHERE id = :id"),
@@ -1671,6 +1695,7 @@ def train_verify(
         text(
             """
             SELECT cp.id, cp.card_id, cp.token_value, cp.issued_at, cp.expires_at, cp.status,
+                   cp.used_at,
                    dc.user_id, dc.card_identifier, dc.valid_until, dc.status AS card_status,
                    i.name AS issuer_name
             FROM card_presentations cp
@@ -1688,8 +1713,12 @@ def train_verify(
     result = "valid"
     notes = "Card presentation accepted"
 
-    # Allow rescanning: accept both 'active' and 'used' statuses
-    if pres["status"] not in ["active", "used"]:
+    # SINGLE-USE QR TOKEN (SECURITY FIX: prevent replay)
+    if pres["used_at"] is not None:
+        result = "invalid"
+        notes = "Token already used (replay detected)"
+    # Only allow 'active' status - 'used' tokens are rejected
+    elif pres["status"] != "active":
         result = "invalid"
         notes = f"Presentation status is {pres['status']}"
     elif datetime.now(timezone.utc).replace(tzinfo=None) > _as_naive_datetime(pres["expires_at"]):
@@ -1717,11 +1746,18 @@ def train_verify(
         },
     )
 
-    # Note: Not marking as 'used' anymore - allows rescanning the same QR multiple times
-    # Verification is recorded in card_verifications table instead
+    # SINGLE-USE: Mark token as used only on first successful validation
     if result == "valid":
-        # Presentation remains 'active' to allow future rescans
-        pass
+        db.execute(
+            text(
+                """
+                UPDATE card_presentations
+                SET status = 'used', used_at = CURRENT_TIMESTAMP
+                WHERE id = :pres_id
+                """
+            ),
+            {"pres_id": pres["id"]},
+        )
 
     holder = db.execute(
         text(
