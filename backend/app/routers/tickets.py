@@ -1,14 +1,3 @@
-"""
-Ticketing & validations router.
-
-Foloseste acelasi engine PostgreSQL ca restul aplicatiei (schema unificata).
-Endpoints:
-  POST /tickets/buy          — cumpara bilet (single trip) + creeaza QR
-  POST /tickets/validate     — conductor scaneaza QR, single-use enforcement
-  GET  /tickets/my           — listare bilete proprii
-  GET  /tickets/catalog      — rute disponibile pentru cumparare
-  GET  /validations/history  — istoric validari (conductor: ale lui)
-"""
 
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -23,24 +12,15 @@ from app.core.database import SessionLocal
 from app.core.roles import ROLE_PASSENGER, ROLE_TRAIN_VERIFIER, has_role, normalize_role
 from app.core.security import decode_token
 
-
 router = APIRouter(tags=["tickets"])
-
-
-# ==============================================================================
 # DB session dependency
-# ==============================================================================
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-
-
-# ==============================================================================
 # Auth helper
-# ==============================================================================
 def _extract_user_from_token(authorization: Optional[str], db: Session) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -71,11 +51,7 @@ def _extract_user_from_token(authorization: Optional[str], db: Session) -> dict:
     user = dict(row)
     user["role"] = normalize_role(user["role"])
     return user
-
-
-# ==============================================================================
 # Pydantic models
-# ==============================================================================
 class BuyTicketRequest(BaseModel):
     train_id: int = Field(..., ge=1)
     departure_station_id: int = Field(..., ge=1)
@@ -83,12 +59,10 @@ class BuyTicketRequest(BaseModel):
     travel_date: str  # YYYY-MM-DD
     ticket_type: str = Field(default="single")  # single | return
 
-
 class ValidateTicketRequest(BaseModel):
     token: str
     device_id: Optional[str] = None
     location_name: Optional[str] = None
-
 
 class ValidateTicketResponse(BaseModel):
     result: str
@@ -96,17 +70,12 @@ class ValidateTicketResponse(BaseModel):
     passenger_name: Optional[str] = None
     ticket_type: Optional[str] = None
     valid_until: Optional[str] = None
-
-
-# ==============================================================================
 # Pricing & discount logic
-# ==============================================================================
 BASE_PRICE_BY_TYPE = {
     "single": 50.00,
     "return": 90.00,
 }
 STUDENT_DISCOUNT_PERCENT = 50.0
-
 
 def _compute_price(db: Session, user_id: int, ticket_type: str) -> tuple[float, float]:
     """Returns (price_after_discount, discount_percent_applied)."""
@@ -128,11 +97,7 @@ def _compute_price(db: Session, user_id: int, ticket_type: str) -> tuple[float, 
     if has_student:
         return round(base * (1 - STUDENT_DISCOUNT_PERCENT / 100), 2), STUDENT_DISCOUNT_PERCENT
     return base, 0.0
-
-
-# ==============================================================================
 # Endpoints
-# ==============================================================================
 @router.get("/tickets/catalog")
 def list_catalog(db: Session = Depends(get_db)):
     """Listeaza rute + trenuri disponibile pentru cumparare."""
@@ -157,7 +122,6 @@ def list_catalog(db: Session = Depends(get_db)):
         )
     ).mappings().all()
     return [dict(r) for r in rows]
-
 
 @router.post("/tickets/buy")
 def buy_ticket(
@@ -284,7 +248,6 @@ def buy_ticket(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Eroare la cumparare: {exc}")
 
-
 @router.get("/tickets/my")
 def list_my_tickets(
     authorization: Optional[str] = Header(default=None),
@@ -321,7 +284,6 @@ def list_my_tickets(
         }
         for r in rows
     ]
-
 
 @router.post("/tickets/validate", response_model=ValidateTicketResponse)
 def validate_ticket(
@@ -448,7 +410,6 @@ def validate_ticket(
         db.rollback()
         return ValidateTicketResponse(result="invalid", message=f"Eroare validare: {exc}")
 
-
 def _log_validation(db: Session, qr_token_id, conductor_id, result, device_id=None, notes=None):
     """Insereaza un rand in validations (audit trail). Daca qr_token_id e None, skip."""
     if qr_token_id is None:
@@ -462,7 +423,6 @@ def _log_validation(db: Session, qr_token_id, conductor_id, result, device_id=No
         ),
         {"qt_id": qr_token_id, "cid": conductor_id, "result": result, "dev": device_id, "notes": notes},
     )
-
 
 @router.get("/validations/history")
 def validations_history(

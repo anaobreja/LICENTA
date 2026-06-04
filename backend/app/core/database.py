@@ -1,20 +1,9 @@
-"""
-Database configuration — PostgreSQL only.
-
-Schema este incarcata o singura data, la pornirea containerului PostgreSQL,
-din database/schema.sql + database/seed_demo.sql (vezi docker-compose.yml).
-Aplicatia NU creeaza tabele la runtime; daca schema lipseste, ridicam exceptie clara.
-"""
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 from app.core.config import settings
-
-
-# ==============================================================================
 # Engine + Session
-# ==============================================================================
 def _create_engine(database_url: str):
     if not database_url.startswith(("postgresql://", "postgresql+psycopg://", "postgresql+psycopg2://")):
         raise RuntimeError(
@@ -31,7 +20,6 @@ def _create_engine(database_url: str):
         pool_recycle=3600,
     )
 
-
 engine = _create_engine(settings.DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -39,11 +27,7 @@ Base = declarative_base()
 # Backend identifier folosit in cod pentru compatibilitate cu importurile existente.
 # Toate ramurile "if DATABASE_BACKEND == 'sqlite'" au fost eliminate.
 DATABASE_BACKEND = "postgresql"
-
-
-# ==============================================================================
 # Startup verification — ne asiguram ca schema e prezenta
-# ==============================================================================
 REQUIRED_TABLES = [
     "users",
     "universities",
@@ -55,6 +39,8 @@ REQUIRED_TABLES = [
     "card_presentations",
     "card_verifications",
     "notifications",
+    "railway_operators",
+    "routes",
     "stations",
     "trains",
     "tickets",
@@ -63,7 +49,6 @@ REQUIRED_TABLES = [
     "qr_tokens",
     "validations",
 ]
-
 
 def verify_schema_loaded() -> None:
     """
@@ -93,11 +78,7 @@ def verify_schema_loaded() -> None:
             "volumul postgres_data si reporneste: "
             "`docker-compose down -v && docker-compose up`."
         )
-
-
-# ==============================================================================
 # Helpers folositi de seed-uri / health checks
-# ==============================================================================
 def get_user_count() -> int:
     with engine.connect() as conn:
         return conn.execute(text("SELECT COUNT(*) FROM users")).scalar() or 0

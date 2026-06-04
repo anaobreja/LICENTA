@@ -11,11 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import SessionLocal, verify_schema_loaded
 from app.routers import auth, identity, tickets, users
-
-
-# ==============================================================================
 # Lifespan: la startup verificam ca schema PostgreSQL este incarcata
-# ==============================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(">>> Railway Digital Identity Platform — starting...")
@@ -28,7 +24,6 @@ async def lifespan(app: FastAPI):
     yield
     print(">>> Shutting down.")
 
-
 app = FastAPI(
     title="Railway Digital Identity Platform",
     description="Platform for managing digital identity and travel rights validation",
@@ -36,11 +31,7 @@ app = FastAPI(
     docs_url="/docs",
     lifespan=lifespan,
 )
-
-
-# ==============================================================================
 # CORS
-# ==============================================================================
 if settings.DEBUG:
     app.add_middleware(
         CORSMiddleware,
@@ -62,11 +53,7 @@ else:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-
-# ==============================================================================
 # Health Check
-# ==============================================================================
 @app.get("/health")
 async def health_check():
     return {
@@ -76,7 +63,6 @@ async def health_check():
         "database": "postgresql",
     }
 
-
 @app.get("/")
 async def root():
     return {
@@ -84,27 +70,18 @@ async def root():
         "docs": "/docs",
         "health": "/health",
     }
-
-
-# ==============================================================================
 # Database Dependency (folosit de unele rute care nu importa get_db din router)
-# ==============================================================================
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-
-
-# ==============================================================================
 # Routers
-# ==============================================================================
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(identity.router)
 app.include_router(tickets.router)
-
 
 if __name__ == "__main__":
     import uvicorn
