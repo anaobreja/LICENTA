@@ -1,24 +1,24 @@
-version: '3.8'
-
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: railway_db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: railway_db
+      POSTGRES_USER: ${DB_USER:-railway}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-railway_dev}
+      POSTGRES_DB: ${DB_NAME:-railway_db}
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ./database/demo_data.sql:/docker-entrypoint-initdb.d/02_demo_data.sql
+      # NOTE: scripts in /docker-entrypoint-initdb.d/ run alphabetically la prima pornire
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./database/seed_demo.sql:/docker-entrypoint-initdb.d/02_seed_demo.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-railway} -d ${DB_NAME:-railway_db}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+    restart: unless-stopped
 
   backend:
     build:
@@ -27,16 +27,18 @@ services:
     container_name: railway_backend
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/railway_db
-      DEBUG: "True"
+      DATABASE_URL: postgresql+psycopg://${DB_USER:-railway}:${DB_PASSWORD:-railway_dev}@postgres:5432/${DB_NAME:-railway_db}
+      DEBUG: ${DEBUG:-True}
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      - ./backend/uploads:/app/uploads
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
 
   frontend:
     build:
@@ -44,13 +46,16 @@ services:
       dockerfile: Dockerfile
     container_name: railway_frontend
     ports:
-      - "5173:5173"
+      - "${FRONTEND_PORT:-5173}:5173"
     environment:
       VITE_API_URL: /api
       VITE_PROXY_TARGET: http://backend:8000
     volumes:
       - ./frontend/src:/app/src
+    depends_on:
+      - backend
     command: npm run dev -- --host 0.0.0.0 --port 5173
+    restart: unless-stopped
 
 volumes:
   postgres_data:
@@ -58,4 +63,3 @@ volumes:
 networks:
   default:
     name: railway_network
-
