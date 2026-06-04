@@ -1,43 +1,46 @@
 """
-FastAPI Backend - Sistem Gestionare Identitate Digitală Călători
-Main application entry point
+FastAPI Backend - Sistem Gestionare Identitate Digitala Calatori
+Main application entry point.
 """
 
-from fastapi import FastAPI, Depends
-from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from sqlalchemy.orm import Session
 
-from app.core.database import engine, SessionLocal
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 from app.core.config import settings
-from app.routers import auth, users, identity, tickets
+from app.core.database import SessionLocal, verify_schema_loaded
+from app.routers import auth, identity, tickets, users
 
 
-# Event handlers
+# ==============================================================================
+# Lifespan: la startup verificam ca schema PostgreSQL este incarcata
+# ==============================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    print("🚀 Application Starting...")
-    # Create tables if not exist
-    # Base.metadata.create_all(bind=engine)
+    print(">>> Railway Digital Identity Platform — starting...")
+    try:
+        verify_schema_loaded()
+        print(">>> Schema PostgreSQL OK — toate tabelele esentiale prezente.")
+    except RuntimeError as exc:
+        print(f">>> SCHEMA ERROR: {exc}")
+        raise
     yield
-    # Shutdown
-    print("🛑 Application Shutting Down...")
+    print(">>> Shutting down.")
 
 
-# Create FastAPI app
 app = FastAPI(
     title="Railway Digital Identity Platform",
     description="Platform for managing digital identity and travel rights validation",
     version="1.0.0",
     docs_url="/docs",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 
-# CORS Configuration
-# CORS Configuration
-# In development allow all origins to simplify testing from a public HTTPS tunnel (localtunnel/ngrok).
+# ==============================================================================
+# CORS
+# ==============================================================================
 if settings.DEBUG:
     app.add_middleware(
         CORSMiddleware,
@@ -50,27 +53,43 @@ else:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://localhost:3000"],
-        allow_origin_regex=r"http://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$",
+        allow_origin_regex=(
+            r"http://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|"
+            r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+            r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$"
+        ),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
 
-# Health Check Endpoint
+# ==============================================================================
+# Health Check
+# ==============================================================================
 @app.get("/health")
 async def health_check():
-    """Check if API is running"""
     return {
         "status": "healthy",
         "service": "Railway Digital Identity Platform",
-        "version": "1.0.0"
+        "version": settings.APP_VERSION,
+        "database": "postgresql",
     }
 
 
-# Database Dependency
+@app.get("/")
+async def root():
+    return {
+        "message": "Welcome to Railway Digital Identity Platform",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
+# ==============================================================================
+# Database Dependency (folosit de unele rute care nu importa get_db din router)
+# ==============================================================================
 def get_db():
-    """Dependency to get DB session"""
     db = SessionLocal()
     try:
         yield db
@@ -78,18 +97,9 @@ def get_db():
         db.close()
 
 
-# Root endpoint
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "Welcome to Railway Digital Identity Platform",
-        "docs": "/docs",
-        "health": "/health"
-    }
-
-
-# Routes will be imported here
+# ==============================================================================
+# Routers
+# ==============================================================================
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(identity.router)
@@ -99,10 +109,4 @@ app.include_router(tickets.router)
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-    )
-
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

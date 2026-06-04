@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.database import DATABASE_BACKEND, SessionLocal
+from app.core.database import SessionLocal
 from app.core.security import (
     create_access_token,
     decode_token,
@@ -110,7 +110,7 @@ def register(
     profile_path = save_uploaded_image(profile_photo, PROFILE_UPLOAD_DIR, prefix="profile") if profile_photo and profile_photo.filename else None
     password_hash = hash_password(password)
 
-    is_active = 1 if DATABASE_BACKEND == "sqlite" else True
+    is_active = True
 
     created = db.execute(
         text(
@@ -242,7 +242,7 @@ def mfa_setup(authorization: str | None = Header(default=None), db: Session = De
         )
 
     secret = generate_totp_secret()
-    mfa_off = False if DATABASE_BACKEND == "postgresql" else 0
+    mfa_off = False
     db.execute(
         text("UPDATE users SET mfa_secret = :secret, mfa_enabled = :mfa_off WHERE user_id = :user_id"),
         {"secret": secret, "mfa_off": mfa_off, "user_id": user_id},
@@ -288,7 +288,7 @@ def mfa_verify(
     if not verify_totp_code(row["mfa_secret"], payload.code.strip().replace(" ", ""), window=settings.TOTP_WINDOW):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid MFA code")
 
-    mfa_on = True if DATABASE_BACKEND == "postgresql" else 1
+    mfa_on = True
     db.execute(
         text("UPDATE users SET mfa_enabled = :mfa_on WHERE user_id = :user_id"),
         {"mfa_on": mfa_on, "user_id": user_id},
@@ -323,7 +323,7 @@ def mfa_disable(
     if not verify_password(payload.password, row["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
 
-    mfa_off = False if DATABASE_BACKEND == "postgresql" else 0
+    mfa_off = False
     db.execute(
         text(
             """
