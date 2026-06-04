@@ -29,7 +29,7 @@ def test_complete_demo_flow(client, upb_agent_token, train_verifier_token):
             "first_name": "Demo",
             "last_name": "User",
             "phone": "+40712345678",
-            "university_name": "Universitatea Politehnica București (UPB)",
+            "university_name": "Universitatea Politehnica Bucuresti (UPB)",
         },
         files={
             "profile_photo": ("demo_photo.png", create_test_image_bytes(), "image/png")
@@ -54,7 +54,7 @@ def test_complete_demo_flow(client, upb_agent_token, train_verifier_token):
         data={
             "legitimation_type": "student_card",
             "legitimation_number_masked": f"ST{int(time.time() * 1000) % 100000}",
-            "university_name": "Universitatea Politehnica București (UPB)",
+            "university_name": "Universitatea Politehnica Bucuresti (UPB)",
             "year_of_study": "2",
             "ci_number": "DEMO123456",
             "ci_name": "Demo User",
@@ -83,7 +83,7 @@ def test_complete_demo_flow(client, upb_agent_token, train_verifier_token):
     doc_id = None
     for doc in docs:
         # Our document was just submitted
-        if doc.get("user_email") == user_email:
+        if doc.get("email") == user_email:
             doc_id = doc["id"]
             break
 
@@ -145,7 +145,7 @@ def test_complete_demo_flow(client, upb_agent_token, train_verifier_token):
     print("✓ COMPLETE E2E FLOW SUCCESSFUL")
     print("="*70)
     print(f"Demo User: {user_email}")
-    print(f"University: Universitatea Politehnica București (UPB)")
+    print(f"University: Universitatea Politehnica Bucuresti (UPB)")
     print(f"Status: Verified, Approved, Card Generated, Single-Use Enforced")
     print("="*70)
 

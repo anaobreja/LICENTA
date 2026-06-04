@@ -140,7 +140,7 @@ class TrainVerifierTasks(TaskSet):
     def on_start(self):
         r = self.client.post(
             "/auth/login",
-            json={"email": "agent.train@railwaydemo.com", "password": "demo"},
+            json={"email": "agent.train@railwaydemo.com", "password": "demo2026"},
             name="/auth/login [train]",
         )
         if r.status_code == 200:
@@ -173,7 +173,7 @@ class AgentTasks(TaskSet):
     def on_start(self):
         r = self.client.post(
             "/auth/login",
-            json={"email": "agent.upb@railwaydemo.com", "password": "demo"},
+            json={"email": "agent.upb@railwaydemo.com", "password": "demo2026"},
             name="/auth/login [agent]",
         )
         if r.status_code == 200:
@@ -212,7 +212,7 @@ class ReadOnlyTasks(TaskSet):
     def on_start(self):
         r = self.client.post(
             "/auth/login",
-            json={"email": "user.demo@railwaydemo.com", "password": "demo"},
+            json={"email": "user.demo@railwaydemo.com", "password": "demo2026"},
             name="/auth/login [demo]",
         )
         if r.status_code == 200:
