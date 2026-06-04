@@ -56,10 +56,6 @@ def _extract_bearer_token(authorization: str | None) -> str:
     return authorization.split(" ", 1)[1].strip()
 
 
-def _is_demo_login_allowed(password_hash: str, provided_password: str) -> bool:
-    return "demo_hash" in (password_hash or "") and provided_password == "demo"
-
-
 def _mfa_is_enabled(value) -> bool:
     if value is None:
         return False
@@ -170,9 +166,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             detail="Invalid email or password",
         )
 
-    password_ok = verify_password(payload.password, row["password_hash"]) or _is_demo_login_allowed(
-        row["password_hash"], payload.password
-    )
+    password_ok = verify_password(payload.password, row["password_hash"])
 
     if not password_ok:
         raise HTTPException(
@@ -326,9 +320,7 @@ def mfa_disable(
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    if not verify_password(payload.password, row["password_hash"]) and not _is_demo_login_allowed(
-        row["password_hash"], payload.password
-    ):
+    if not verify_password(payload.password, row["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
 
     mfa_off = False if DATABASE_BACKEND == "postgresql" else 0

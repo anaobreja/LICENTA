@@ -15,11 +15,15 @@ _DEFAULT_SQLITE_PATH = _REPO_ROOT / "railway_demo.db"
 class Settings(BaseSettings):
     """Application settings"""
 
-    # Database — implicit SQLite in radacina proiectului (fara PostgreSQL obligatoriu)
+    # SQLite - Identity verification (default, no PostgreSQL required)
     DATABASE_URL: str = f"sqlite:///{_DEFAULT_SQLITE_PATH.as_posix()}"
     
-    # JWT — citit din .env, NU hardcoded
-    SECRET_KEY: str = "fallback-secret-key-never-use-in-production-change-in-env"
+    # PostgreSQL - Ticketing system (optional, if provided in .env)
+    # Format: postgresql://user:password@host:port/database
+    POSTGRES_TICKETING_URL: str = ""
+    
+    # JWT — REQUIRED from .env, no fallback (SECURITY FIX)
+    SECRET_KEY: str  # Must be set in .env
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 ore pentru demo
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7

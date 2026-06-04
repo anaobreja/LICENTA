@@ -247,18 +247,20 @@ def _initialize_sqlite_demo_data(sqlite_engine):
     )
     """
 
+    # Parola demo pentru toate conturile de test: "demo2026"
+    _DEMO_HASH = "$2b$12$HijeaYT9.i7NHMV/w9m4eez/yAa6hzJprroikrkomRWEbSnp7pIgO"
     demo_users = [
-        ("Alexandra", "Popescu", "alexandra.popescu@email.com", "$2b$12$demo_hash_alexandra_popescu_12345678901234567890123456789", "+40721234567", "1995-03-15", "passenger"),
-        ("Andrei", "Ionescu", "andrei.ionescu@email.com", "$2b$12$demo_hash_andrei_ionescu_12345678901234567890123456789", "+40722334455", "2002-07-22", "passenger"),
-        ("Ioan", "Vasile", "ioan.vasile@email.com", "$2b$12$demo_hash_ioan_vasile_12345678901234567890123456789", "+40723445566", "1955-12-10", "passenger"),
-        ("Maria", "Dumitru", "maria.dumitru@email.com", "$2b$12$demo_hash_maria_dumitru_12345678901234567890123456789", "+40724556677", "1988-05-18", "passenger"),
-        ("George", "Constantinescu", "george.constantinescu@email.com", "$2b$12$demo_hash_george_constantinescu_123456789012345678901234", "+40725667788", "1978-01-09", "conductor"),
-        ("Administrator", "System", "admin@railway.gov.ro", "$2b$12$demo_hash_admin_system_1234567890123456789012345678901234", "+40726778899", "1980-06-20", "admin"),
-        ("Demo", "User", "user.demo@railwaydemo.com", "$2b$12$demo_hash_user_demo_123456789012345678901234567890123456", "+40720000001", "1999-01-01", "passenger"),
-        ("Demo", "Train", "agent.train@railwaydemo.com", "$2b$12$demo_hash_agent_train_123456789012345678901234567890123", "+40720000003", "1985-01-01", "conductor"),
-        ("Agent", "UPB",   "agent.upb@railwaydemo.com",   "$2b$12$demo_hash_agent_upb_1234567890123456789012345678901234", "+40720000004", "1985-01-01", "university_agent"),
-        ("Agent", "ASE",   "agent.ase@railwaydemo.com",   "$2b$12$demo_hash_agent_ase_1234567890123456789012345678901234", "+40720000005", "1986-01-01", "university_agent"),
-        ("Agent", "UNIBUC","agent.unibuc@railwaydemo.com","$2b$12$demo_hash_agent_unibuc_12345678901234567890123456789012", "+40720000006", "1987-01-01", "university_agent"),
+        ("Alexandra", "Popescu", "alexandra.popescu@email.com", _DEMO_HASH, "+40721234567", "1995-03-15", "passenger"),
+        ("Andrei", "Ionescu", "andrei.ionescu@email.com", _DEMO_HASH, "+40722334455", "2002-07-22", "passenger"),
+        ("Ioan", "Vasile", "ioan.vasile@email.com", _DEMO_HASH, "+40723445566", "1955-12-10", "passenger"),
+        ("Maria", "Dumitru", "maria.dumitru@email.com", _DEMO_HASH, "+40724556677", "1988-05-18", "passenger"),
+        ("George", "Constantinescu", "george.constantinescu@email.com", _DEMO_HASH, "+40725667788", "1978-01-09", "conductor"),
+        ("Administrator", "System", "admin@railway.gov.ro", _DEMO_HASH, "+40726778899", "1980-06-20", "admin"),
+        ("Demo", "User", "user.demo@railwaydemo.com", _DEMO_HASH, "+40720000001", "1999-01-01", "passenger"),
+        ("Demo", "Train", "agent.train@railwaydemo.com", _DEMO_HASH, "+40720000003", "1985-01-01", "conductor"),
+        ("Agent", "UPB",   "agent.upb@railwaydemo.com",   _DEMO_HASH, "+40720000004", "1985-01-01", "university_agent"),
+        ("Agent", "ASE",   "agent.ase@railwaydemo.com",   _DEMO_HASH, "+40720000005", "1986-01-01", "university_agent"),
+        ("Agent", "UNIBUC","agent.unibuc@railwaydemo.com", _DEMO_HASH, "+40720000006", "1987-01-01", "university_agent"),
     ]
 
     with sqlite_engine.begin() as connection:
@@ -334,6 +336,22 @@ def _ensure_source_document_columns(engine, backend: str) -> None:
                     conn.execute(
                         text(f"ALTER TABLE source_documents ADD COLUMN IF NOT EXISTS {col} {col_type}")
                     )
+        except Exception:
+            pass
+
+
+def _ensure_card_presentation_columns(engine, backend: str) -> None:
+    """Ensure used_at column exists on card_presentations (single-use QR fix)."""
+    if backend == "sqlite":
+        with engine.begin() as conn:
+            rows = conn.execute(text("PRAGMA table_info(card_presentations)")).fetchall()
+            existing = {r[1] for r in rows}
+            if "used_at" not in existing:
+                conn.execute(text("ALTER TABLE card_presentations ADD COLUMN used_at TEXT"))
+    else:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE card_presentations ADD COLUMN IF NOT EXISTS used_at TIMESTAMP"))
         except Exception:
             pass
 
@@ -619,6 +637,7 @@ else:
 _ensure_source_document_columns(engine, DATABASE_BACKEND)
 _ensure_user_profile_columns(engine, DATABASE_BACKEND)
 _ensure_user_mfa_columns(engine, DATABASE_BACKEND)
+_ensure_card_presentation_columns(engine, DATABASE_BACKEND)
 
 if DATABASE_BACKEND == "sqlite":
     with engine.begin() as _conn:
@@ -646,10 +665,11 @@ if DATABASE_BACKEND == "sqlite":
         except Exception:
             pass
         # Seed agent UPB dacă nu există
+        _DEMO_HASH = "$2b$12$HijeaYT9.i7NHMV/w9m4eez/yAa6hzJprroikrkomRWEbSnp7pIgO"
         for _email, _fname, _lname, _hash, _phone, _univ_id in [
-            ('agent.upb@railwaydemo.com',   'Agent','UPB',   '$2b$12$demo_hash_agent_upb_1234567890123456789012345678901234',   '+40720000004', 1),
-            ('agent.ase@railwaydemo.com',   'Agent','ASE',   '$2b$12$demo_hash_agent_ase_1234567890123456789012345678901234',   '+40720000005', 2),
-            ('agent.unibuc@railwaydemo.com','Agent','UNIBUC','$2b$12$demo_hash_agent_unibuc_12345678901234567890123456789012','+40720000006', 3),
+            ('agent.upb@railwaydemo.com',   'Agent','UPB',    _DEMO_HASH, '+40720000004', 1),
+            ('agent.ase@railwaydemo.com',   'Agent','ASE',    _DEMO_HASH, '+40720000005', 2),
+            ('agent.unibuc@railwaydemo.com','Agent','UNIBUC', _DEMO_HASH, '+40720000006', 3),
         ]:
             _conn.execute(text("""
                 INSERT OR IGNORE INTO users
