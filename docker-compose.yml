@@ -25,9 +25,9 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: railway_backend
+    env_file: .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/railway_db
-      SECRET_KEY: your-secret-key-change-in-production
       DEBUG: "True"
     ports:
       - "8000:8000"
