@@ -95,3 +95,17 @@ FAIL
 # Local exploratory scripts (not part of the application)
 check_*.py
 compare*.py
+count.py
+deep_*.py
+definitive.py
+diag_*.py
+direct.py
+final_*.py
+find_*.py
+hyphen_*.py
+recount.py
+search_*.py
+side_by_side.py
+strict.py
+verify_*.py
+prenume_diff.txt
