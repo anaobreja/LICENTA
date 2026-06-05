@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { buyTicket, getTicketsCatalog } from '../services/api'
+import { buyTicket, getTicketsCatalog, quoteTicket } from '../services/api'
 
 const TYPE_LABEL = { single: 'Bilet simplu', return: 'Dus-întors' }
 
@@ -31,6 +31,30 @@ export default function BuyTicket() {
     () => catalog.find((r) => String(r.train_id) === String(selectedTrainId)),
     [catalog, selectedTrainId]
   )
+
+  const [quote, setQuote] = useState(null)
+  const [quoting, setQuoting] = useState(false)
+
+  // Cere preview pret de la backend cand userul are toate datele
+  useEffect(() => {
+    if (!selectedRoute || !travelDate || !ticketType) {
+      setQuote(null)
+      return
+    }
+    let alive = true
+    setQuoting(true)
+    quoteTicket({
+      train_id: selectedRoute.train_id,
+      departure_station_id: selectedRoute.departure_id,
+      arrival_station_id: selectedRoute.arrival_id,
+      travel_date: travelDate,
+      ticket_type: ticketType,
+    })
+      .then((q) => { if (alive) setQuote(q) })
+      .catch(() => { if (alive) setQuote(null) })
+      .finally(() => { if (alive) setQuoting(false) })
+    return () => { alive = false }
+  }, [selectedRoute, travelDate, ticketType])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -131,9 +155,46 @@ export default function BuyTicket() {
           </div>
         </div>
 
-        <div className="rounded-xl bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 px-4 py-3 text-sm text-blue-700 dark:text-blue-200">
-          💡 Dacă ai credențială <strong>student</strong> activă, primești automat 50% reducere.
-        </div>
+        {/* Preview tarif din BD - transparenta GDPR + legal */}
+        {selectedRoute && (
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4">
+            <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
+              Detalii tarif
+            </div>
+            {quoting && (
+              <div className="text-sm text-slate-500 dark:text-slate-400 animate-pulse">Calculez tariful…</div>
+            )}
+            {!quoting && quote && (
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-600 dark:text-slate-400">Distanță:</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-200">{quote.distance_km} km</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600 dark:text-slate-400">Tarif normal {ticketType === 'return' ? '(dus-întors)' : '(dus)'}:</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-200">{quote.base_price.toFixed(2)} RON</span>
+                </div>
+                {quote.discount_percent > 0 && (
+                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                    <span>Reducere student (OUG 11/2024) {quote.discount_percent}%:</span>
+                    <span className="font-mono">−{quote.savings.toFixed(2)} RON</span>
+                  </div>
+                )}
+                <div className="border-t border-slate-200 dark:border-slate-700 mt-2 pt-2 flex justify-between items-baseline">
+                  <span className="font-bold text-slate-900 dark:text-slate-100">Plătești:</span>
+                  <span className="font-bold text-xl text-emerald-600 dark:text-emerald-400 font-mono">
+                    {quote.final_price.toFixed(2)} RON
+                  </span>
+                </div>
+              </div>
+            )}
+            {!quoting && !quote && (
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                💡 Studenții cu credențial activ primesc automat 90% reducere (OUG 11/2024, număr nelimitat de călătorii).
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex gap-3 pt-2">
           <button

@@ -400,3 +400,21 @@ export const validateTicketToken = (token, deviceId = null, locationName = null)
 
 export const getValidationsHistory = (limit = 50) =>
   apiCall(`/validations/history?limit=${limit}`)
+
+export const quoteTicket = ({
+  train_id,
+  departure_station_id,
+  arrival_station_id,
+  travel_date,
+  ticket_type = 'single',
+}) =>
+  apiCall('/tickets/quote', {
+    method: 'POST',
+    body: JSON.stringify({
+      train_id,
+      departure_station_id,
+      arrival_station_id,
+      travel_date,
+      ticket_type,
+    }),
+  })
