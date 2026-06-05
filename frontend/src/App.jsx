@@ -13,6 +13,10 @@ import VerifyPresentation from './pages/VerifyPresentation'
 import Profile from './pages/Profile'
 import UniversityAgentDashboard from './pages/UniversityAgentDashboard'
 import Settings from './pages/Settings'
+import BuyTicket from './pages/BuyTicket'
+import MyTickets from './pages/MyTickets'
+import TravelHistory from './pages/TravelHistory'
+import ValidateTicket from './pages/ValidateTicket'
 
 // Components
 import ProtectedRoute from './components/ProtectedRoute'
@@ -149,6 +153,33 @@ function App() {
           />
 
           <Route
+            path="/tickets"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated} user={user} role="passenger">
+                <MyTickets />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/tickets/buy"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated} user={user} role="passenger">
+                <BuyTicket />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/travel-history"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated} user={user}>
+                <TravelHistory user={user} />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/profile"
             element={
               <ProtectedRoute isAuthenticated={isAuthenticated} user={user}>
@@ -167,6 +198,15 @@ function App() {
           />
 
           {/* Train Verifier Routes */}
+          <Route
+            path="/validate-ticket"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated} user={user} role="train_verifier">
+                <ValidateTicket />
+              </ProtectedRoute>
+            }
+          />
+
           <Route 
             path="/verify" 
             element={

@@ -69,11 +69,17 @@ function Navigation({ user, onLogout }) {
               </Link>
               <Link to="/credentials" className="hover:text-blue-200">Credentiale</Link>
               <Link to="/present" className="hover:text-blue-200">Card Digital</Link>
+              <Link to="/tickets" className="hover:text-blue-200">Bilete</Link>
+              <Link to="/travel-history" className="hover:text-blue-200">Istoric calatorii</Link>
             </>
           )}
 
           {user?.role === 'train_verifier' && (
-            <Link to="/verify" className="hover:text-blue-200">Verificare card digital</Link>
+            <>
+              <Link to="/verify" className="hover:text-blue-200">Verificare card digital</Link>
+              <Link to="/validate-ticket" className="hover:text-blue-200">Validare bilet</Link>
+              <Link to="/travel-history" className="hover:text-blue-200">Istoric</Link>
+            </>
           )}
 
           {user?.role === 'university_agent' && (

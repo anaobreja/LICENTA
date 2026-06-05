@@ -1,13 +1,3 @@
-"""
-Pytest fixtures pentru suita de teste.
-
-Strategie:
-  * Foloseste o baza de date PostgreSQL dedicata pentru teste (railway_test_db).
-  * Default: postgresql+psycopg://railway:railway_dev@localhost:5432/railway_test_db
-    (suprascris cu env TEST_DATABASE_URL).
-  * Sesiunea: la inceput, recreeaza DB-ul de test din schema.sql + seed_demo.sql.
-  * Test: inainte de fiecare test golim tabelele tranzitorii (pastram seed-ul).
-"""
 
 import os
 import sys
@@ -31,7 +21,6 @@ from sqlalchemy import create_engine, text
 
 from helpers import register_and_login
 
-
 # ===== 2. Helpers DB ========================================================
 REPO_ROOT = BACKEND_PATH.parent
 SCHEMA_PATH = REPO_ROOT / "database" / "schema.sql"
@@ -45,20 +34,16 @@ KEEP_TABLES = {
     "digital_cards", "user_credentials",
 }
 
-
 def _psycopg_dsn(url: str) -> str:
     """Converteste URL SQLAlchemy in DSN psycopg pur (fara '+psycopg')."""
     return url.replace("postgresql+psycopg://", "postgresql://")
 
-
 def _get_test_db_name() -> str:
     return TEST_DB_URL.rsplit("/", 1)[1]
-
 
 def _admin_dsn() -> str:
     """DSN catre database 'postgres' (pentru DROP/CREATE DATABASE)."""
     return _psycopg_dsn(TEST_DB_URL.rsplit("/", 1)[0] + "/postgres")
-
 
 def _recreate_test_database():
     """Recreeaza DB-ul de test si incarca schema + seed prin psycopg (multi-statement)."""
@@ -82,7 +67,6 @@ def _recreate_test_database():
                 sql = path.read_text(encoding="utf-8")
                 cur.execute(sql)
 
-
 def _truncate_transactional_tables(engine):
     """Goleste tabelele tranzitorii (pastreaza seed-ul demo)."""
     with engine.begin() as conn:
@@ -97,14 +81,12 @@ def _truncate_transactional_tables(engine):
                 + " RESTART IDENTITY CASCADE"
             ))
 
-
 # ===== 3. Session-scope: create test DB once =================================
 @pytest.fixture(scope="session", autouse=True)
 def _setup_test_database():
     """Creeaza DB de test o singura data per sesiune."""
     _recreate_test_database()
     yield
-
 
 # ===== 4. App + client =======================================================
 @pytest.fixture(scope="session")
@@ -113,7 +95,6 @@ def app():
     from app.main import app as fastapi_app
     return fastapi_app
 
-
 @pytest.fixture()
 def client(app):
     """TestClient cu cleanup intre teste (truncate tabele tranzitorii)."""
@@ -121,13 +102,11 @@ def client(app):
     _truncate_transactional_tables(engine)
     return TestClient(app)
 
-
 # ===== 5. Fixtures de utilizatori (foloseste seed-ul demo) ==================
 @pytest.fixture
 def passenger_token(client):
     """JWT pentru un pasager nou inregistrat."""
     return register_and_login(client, "passenger")
-
 
 @pytest.fixture
 def train_verifier_token(client):
@@ -139,7 +118,6 @@ def train_verifier_token(client):
     assert response.status_code == 200, f"Train verifier login failed: {response.text}"
     return response.json()["access_token"]
 
-
 @pytest.fixture
 def upb_agent_token(client):
     """JWT pentru agentul UPB (agent.upb / demo2026)."""
@@ -149,7 +127,6 @@ def upb_agent_token(client):
     )
     assert response.status_code == 200, f"UPB agent login failed: {response.text}"
     return response.json()["access_token"]
-
 
 @pytest.fixture
 def ase_agent_token(client):

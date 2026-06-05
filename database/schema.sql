@@ -1,22 +1,13 @@
--- ==============================================================================
 -- SISTEM GESTIONARE IDENTITATE DIGITALA SI DREPTURI CALATORII - TRANSPORT FEROVIAR
--- Schema PostgreSQL — single source of truth pentru aplicatie
 --
--- Aceasta schema este executata de container-ul PostgreSQL la prima pornire
 -- (vezi docker-compose.yml -> volume mount /docker-entrypoint-initdb.d/01_schema.sql).
--- Aplicatia NU mai creeaza tabele ad-hoc la runtime: toate definitiile sunt aici.
 --
--- Convenții:
 --   * SERIAL PRIMARY KEY pentru toate tabelele (compatibil PG <=12, simplu)
 --   * FOREIGN KEY ... ON DELETE CASCADE sau RESTRICT explicit la fiecare relatie
 --   * CHECK constraints pe coloanele de status / enum
 --   * Index pe coloane folosite frecvent in WHERE / JOIN
 --   * TIMESTAMP fara TZ (aplicatia normalizeaza la UTC in Python)
--- ==============================================================================
-
--- ==============================================================================
 -- DROP ORDER: dinspre dependinte spre tabele de baza
--- ==============================================================================
 DROP VIEW IF EXISTS v_user_credentials_active CASCADE;
 DROP VIEW IF EXISTS v_validations_summary CASCADE;
 DROP VIEW IF EXISTS active_travel_entitlements CASCADE;
@@ -56,11 +47,7 @@ DROP TABLE IF EXISTS digital_identities CASCADE;
 DROP TABLE IF EXISTS university_students CASCADE;
 DROP TABLE IF EXISTS universities CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
-
-
--- ==============================================================================
 -- 0. UNIVERSITATI PARTENERE
--- ==============================================================================
 CREATE TABLE universities (
     university_id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -76,11 +63,7 @@ CREATE INDEX idx_universities_short_name ON universities(short_name);
 CREATE INDEX idx_universities_email_domain ON universities(email_domain);
 
 COMMENT ON TABLE universities IS 'Universitati partenere cu agenti verificatori pentru facilitati studentesti';
-
-
--- ==============================================================================
 -- 0b. STUDENTI INSCRISI (per universitate) — folosit la verificarea legitimatiei
--- ==============================================================================
 CREATE TABLE university_students (
     enrollment_id SERIAL PRIMARY KEY,
     university_id INTEGER NOT NULL,
@@ -104,11 +87,7 @@ CREATE INDEX idx_university_students_number ON university_students(student_numbe
 CREATE INDEX idx_university_students_status ON university_students(enrollment_status);
 
 COMMENT ON TABLE university_students IS 'Baza de date a studentilor inscrisi - folosita de agenti la validarea facilitatilor';
-
-
--- ==============================================================================
 -- 1. UTILIZATORI
--- ==============================================================================
 CREATE TABLE users (
     user_id SERIAL PRIMARY KEY,
     first_name VARCHAR(100) NOT NULL,
@@ -142,11 +121,7 @@ CREATE INDEX idx_users_university_id ON users(university_id);
 COMMENT ON TABLE users IS 'Entitate centrala - toti utilizatorii sistemului (pasageri, conductori, agenti universitari, admini)';
 COMMENT ON COLUMN users.mfa_enabled IS 'Daca TOTP MFA este activ pentru cont';
 COMMENT ON COLUMN users.university_name IS 'Numele textual al universitatii (denormalizat pentru legitimatii)';
-
-
--- ==============================================================================
 -- 2. IDENTITATI DIGITALE (concept — ramane pentru ER conceptual)
--- ==============================================================================
 CREATE TABLE digital_identities (
     identity_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL UNIQUE,
@@ -162,11 +137,7 @@ CREATE TABLE digital_identities (
 
 CREATE INDEX idx_digital_identities_user_id ON digital_identities(user_id);
 CREATE INDEX idx_digital_identities_status ON digital_identities(status);
-
-
--- ==============================================================================
 -- 3. METODE DE AUTENTIFICARE (legate de identity)
--- ==============================================================================
 CREATE TABLE auth_methods (
     method_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -181,11 +152,7 @@ CREATE TABLE auth_methods (
 
 CREATE INDEX idx_auth_methods_user_id ON auth_methods(user_id);
 CREATE INDEX idx_auth_methods_enabled ON auth_methods(is_enabled);
-
-
--- ==============================================================================
 -- 4. EMITENTI (issuers) — universitati, autoritate transport
--- ==============================================================================
 CREATE TABLE issuers (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
@@ -203,11 +170,7 @@ COMMENT ON TABLE issuers IS 'Autoritati care emit credentiale digitale (universi
 ALTER TABLE users
     ADD CONSTRAINT fk_users_issuer
     FOREIGN KEY (issuer_id) REFERENCES issuers(id) ON DELETE SET NULL;
-
-
--- ==============================================================================
 -- 5. DOCUMENTE SURSA — CI / legitimatii incarcate de pasageri
--- ==============================================================================
 CREATE TABLE source_documents (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -237,11 +200,7 @@ CREATE INDEX idx_source_documents_university ON source_documents(university_name
 CREATE INDEX idx_source_documents_type ON source_documents(document_type);
 
 COMMENT ON TABLE source_documents IS 'Documente fizice/digitale incarcate pentru aprobare (CI, legitimatie student/elev)';
-
-
--- ==============================================================================
 -- 6. REVIZUIRI DOCUMENTE — log aprobari/respingeri de catre agentii universitari
--- ==============================================================================
 CREATE TABLE document_reviews (
     id SERIAL PRIMARY KEY,
     document_id INTEGER NOT NULL,
@@ -256,11 +215,7 @@ CREATE TABLE document_reviews (
 
 CREATE INDEX idx_document_reviews_document_id ON document_reviews(document_id);
 CREATE INDEX idx_document_reviews_reviewer_id ON document_reviews(reviewer_id);
-
-
--- ==============================================================================
 -- 7. CREDENTIALE UTILIZATOR — claim-uri active emise (ex: student la UPB)
--- ==============================================================================
 CREATE TABLE user_credentials (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -280,11 +235,7 @@ CREATE INDEX idx_user_credentials_user_id ON user_credentials(user_id);
 CREATE INDEX idx_user_credentials_status ON user_credentials(status);
 CREATE INDEX idx_user_credentials_type ON user_credentials(credential_type);
 CREATE INDEX idx_user_credentials_valid_until ON user_credentials(valid_until);
-
-
--- ==============================================================================
 -- 8. CARDURI DIGITALE — cardul efectiv emis pentru un user (1:1)
--- ==============================================================================
 CREATE TABLE digital_cards (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL UNIQUE,
@@ -302,11 +253,7 @@ CREATE TABLE digital_cards (
 CREATE INDEX idx_digital_cards_user_id ON digital_cards(user_id);
 CREATE INDEX idx_digital_cards_status ON digital_cards(status);
 CREATE INDEX idx_digital_cards_valid_until ON digital_cards(valid_until);
-
-
--- ==============================================================================
 -- 9. PREZENTARI CARD — token QR generat de pasager pentru identitate
--- ==============================================================================
 CREATE TABLE card_presentations (
     id SERIAL PRIMARY KEY,
     card_id INTEGER NOT NULL,
@@ -326,11 +273,7 @@ CREATE INDEX idx_card_presentations_expires_at ON card_presentations(expires_at)
 
 COMMENT ON TABLE card_presentations IS 'QR tokens generate de pasager pentru a-si prezenta identitatea (single-use)';
 COMMENT ON COLUMN card_presentations.used_at IS 'Timestamp prima validare reusita - anti-replay';
-
-
--- ==============================================================================
 -- 10. VERIFICARI CARD — log scanari de catre conductori
--- ==============================================================================
 CREATE TABLE card_verifications (
     id SERIAL PRIMARY KEY,
     card_presentation_id INTEGER NOT NULL,
@@ -346,11 +289,7 @@ CREATE TABLE card_verifications (
 CREATE INDEX idx_card_verifications_pres_id ON card_verifications(card_presentation_id);
 CREATE INDEX idx_card_verifications_verifier ON card_verifications(verifier_user_id);
 CREATE INDEX idx_card_verifications_time ON card_verifications(verification_time);
-
-
--- ==============================================================================
 -- 11. NOTIFICARI — in-app pentru pasageri
--- ==============================================================================
 CREATE TABLE notifications (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -365,11 +304,7 @@ CREATE TABLE notifications (
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX idx_notifications_is_read ON notifications(is_read);
 CREATE INDEX idx_notifications_created_at ON notifications(created_at);
-
-
--- ==============================================================================
 -- 12. OPERATORI FEROVIARI
--- ==============================================================================
 CREATE TABLE railway_operators (
     operator_id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -381,11 +316,7 @@ CREATE TABLE railway_operators (
 );
 
 CREATE INDEX idx_railway_operators_code ON railway_operators(code);
-
-
--- ==============================================================================
 -- 13. STATII
--- ==============================================================================
 CREATE TABLE stations (
     station_id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -398,11 +329,7 @@ CREATE TABLE stations (
 
 CREATE INDEX idx_stations_code ON stations(code);
 CREATE INDEX idx_stations_city ON stations(city);
-
-
--- ==============================================================================
 -- 14. RUTE
--- ==============================================================================
 CREATE TABLE routes (
     route_id SERIAL PRIMARY KEY,
     operator_id INTEGER NOT NULL,
@@ -422,11 +349,7 @@ CREATE TABLE routes (
 CREATE INDEX idx_routes_operator_id ON routes(operator_id);
 CREATE INDEX idx_routes_origin ON routes(origin_station_id);
 CREATE INDEX idx_routes_destination ON routes(destination_station_id);
-
-
--- ==============================================================================
 -- 15. STATII PE RUTA (ordine + km)
--- ==============================================================================
 CREATE TABLE route_stops (
     route_stop_id SERIAL PRIMARY KEY,
     route_id INTEGER NOT NULL,
@@ -442,11 +365,7 @@ CREATE TABLE route_stops (
 
 CREATE INDEX idx_route_stops_route_id ON route_stops(route_id);
 CREATE INDEX idx_route_stops_station_id ON route_stops(station_id);
-
-
--- ==============================================================================
 -- 16. TRENURI
--- ==============================================================================
 CREATE TABLE trains (
     train_id SERIAL PRIMARY KEY,
     operator_id INTEGER NOT NULL,
@@ -464,11 +383,7 @@ CREATE TABLE trains (
 CREATE INDEX idx_trains_operator_id ON trains(operator_id);
 CREATE INDEX idx_trains_route_id ON trains(route_id);
 CREATE INDEX idx_trains_number ON trains(train_number);
-
-
--- ==============================================================================
 -- 17. BILETE
--- ==============================================================================
 CREATE TABLE tickets (
     ticket_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -495,11 +410,7 @@ CREATE INDEX idx_tickets_user_id ON tickets(user_id);
 CREATE INDEX idx_tickets_train_id ON tickets(train_id);
 CREATE INDEX idx_tickets_travel_date ON tickets(travel_date);
 CREATE INDEX idx_tickets_status ON tickets(ticket_status);
-
-
--- ==============================================================================
 -- 18. ABONAMENTE
--- ==============================================================================
 CREATE TABLE subscriptions (
     subscription_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -522,11 +433,7 @@ CREATE TABLE subscriptions (
 CREATE INDEX idx_subscriptions_user_id ON subscriptions(user_id);
 CREATE INDEX idx_subscriptions_status ON subscriptions(status);
 CREATE INDEX idx_subscriptions_valid_until ON subscriptions(valid_until);
-
-
--- ==============================================================================
 -- 19. DREPTURI DE CALATORIE (unificare ticket + subscription)
--- ==============================================================================
 CREATE TABLE travel_entitlements (
     entitlement_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -553,11 +460,7 @@ CREATE TABLE travel_entitlements (
 CREATE INDEX idx_travel_entitlements_user_id ON travel_entitlements(user_id);
 CREATE INDEX idx_travel_entitlements_status ON travel_entitlements(status);
 CREATE INDEX idx_travel_entitlements_valid_until ON travel_entitlements(valid_until);
-
-
--- ==============================================================================
 -- 20. QR TOKENS pentru bilete / abonamente (single-use)
--- ==============================================================================
 CREATE TABLE qr_tokens (
     qr_token_id SERIAL PRIMARY KEY,
     entitlement_id INTEGER NOT NULL,
@@ -574,11 +477,7 @@ CREATE TABLE qr_tokens (
 CREATE INDEX idx_qr_tokens_entitlement_id ON qr_tokens(entitlement_id);
 CREATE INDEX idx_qr_tokens_status ON qr_tokens(status);
 CREATE INDEX idx_qr_tokens_expires_at ON qr_tokens(expires_at);
-
-
--- ==============================================================================
 -- 21. VALIDARI BILETE (controlor scaneaza QR in tren)
--- ==============================================================================
 CREATE TABLE validations (
     validation_id SERIAL PRIMARY KEY,
     qr_token_id INTEGER NOT NULL,
@@ -597,11 +496,7 @@ CREATE TABLE validations (
 CREATE INDEX idx_validations_qr_token_id ON validations(qr_token_id);
 CREATE INDEX idx_validations_conductor_id ON validations(conductor_id);
 CREATE INDEX idx_validations_validation_time ON validations(validation_time);
-
-
--- ==============================================================================
 -- 22. AUDIT LOGS (cross-cutting)
--- ==============================================================================
 CREATE TABLE audit_logs (
     audit_log_id SERIAL PRIMARY KEY,
     actor_user_id INTEGER,
@@ -618,11 +513,7 @@ CREATE INDEX idx_audit_logs_actor_user_id ON audit_logs(actor_user_id);
 CREATE INDEX idx_audit_logs_action_type ON audit_logs(action_type);
 CREATE INDEX idx_audit_logs_target_table ON audit_logs(target_table);
 CREATE INDEX idx_audit_logs_action_timestamp ON audit_logs(action_timestamp);
-
-
--- ==============================================================================
 -- VIEW: drepturi de calatorie active
--- ==============================================================================
 CREATE VIEW active_travel_entitlements AS
 SELECT
     te.entitlement_id,
@@ -645,11 +536,7 @@ LEFT JOIN tickets t       ON t.ticket_id = te.ticket_id
 LEFT JOIN subscriptions s ON s.subscription_id = te.subscription_id
 WHERE te.status = 'active'
   AND te.valid_until > CURRENT_TIMESTAMP;
-
-
--- ==============================================================================
 -- VIEW: credentialele active per user
--- ==============================================================================
 CREATE VIEW v_user_credentials_active AS
 SELECT
     uc.id,
@@ -666,11 +553,7 @@ JOIN users u ON u.user_id = uc.user_id
 LEFT JOIN issuers i ON i.id = uc.issuer_id
 WHERE uc.status = 'active'
   AND uc.valid_until > CURRENT_TIMESTAMP;
-
-
--- ==============================================================================
 -- VIEW: istoric validari biletelor (pentru rapoarte)
--- ==============================================================================
 CREATE VIEW v_validations_summary AS
 SELECT
     v.validation_id,
@@ -689,11 +572,7 @@ JOIN qr_tokens qt           ON qt.qr_token_id = v.qr_token_id
 JOIN travel_entitlements te ON te.entitlement_id = qt.entitlement_id
 JOIN users pu               ON pu.user_id = te.user_id
 JOIN users cu               ON cu.user_id = v.conductor_id;
-
-
--- ==============================================================================
 -- VIEW: rezumat universitate-agent (cereri pending / approved / rejected)
--- ==============================================================================
 CREATE VIEW university_agent_summary AS
 SELECT
     univ.university_id,
@@ -704,7 +583,6 @@ SELECT
 FROM universities univ
 LEFT JOIN source_documents sd ON sd.university_name = univ.name
 GROUP BY univ.university_id, univ.name;
-
 
 COMMENT ON VIEW active_travel_entitlements IS 'Drepturi de calatorie valide la momentul interogarii';
 COMMENT ON VIEW v_user_credentials_active IS 'Credentiale active per utilizator (claim-uri verificabile)';

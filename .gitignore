@@ -44,6 +44,11 @@ yarn-debug.log*
 yarn-error.log*
 .next/
 
+# Frontend build: COMMIT-uit in repo ca aplicatia sa porneasca fara `npm install/build`
+# (README spune ca nu e necesar Node.js pentru a rula demo-ul).
+!frontend/dist/
+!frontend/dist/**
+
 # Database (exclus din repo — se creeaza automat la pornire / docker init)
 *.db
 *.sqlite

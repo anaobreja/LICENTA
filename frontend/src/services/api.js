@@ -361,3 +361,42 @@ export const exportUserData = () =>
 export const deleteAccount = () =>
   apiCall('/users/me', { method: 'DELETE' })
 
+
+
+// ============================================================================
+// Tickets / Travel
+// ============================================================================
+export const getTicketsCatalog = () => apiCall('/tickets/catalog')
+
+export const buyTicket = ({
+  train_id,
+  departure_station_id,
+  arrival_station_id,
+  travel_date,
+  ticket_type = 'single',
+}) =>
+  apiCall('/tickets/buy', {
+    method: 'POST',
+    body: JSON.stringify({
+      train_id,
+      departure_station_id,
+      arrival_station_id,
+      travel_date,
+      ticket_type,
+    }),
+  })
+
+export const getMyTickets = () => apiCall('/tickets/my')
+
+export const validateTicketToken = (token, deviceId = null, locationName = null) =>
+  apiCall('/tickets/validate', {
+    method: 'POST',
+    body: JSON.stringify({
+      token,
+      ...(deviceId ? { device_id: deviceId } : {}),
+      ...(locationName ? { location_name: locationName } : {}),
+    }),
+  })
+
+export const getValidationsHistory = (limit = 50) =>
+  apiCall(`/validations/history?limit=${limit}`)
