@@ -70,34 +70,176 @@ class ValidateTicketResponse(BaseModel):
     passenger_name: Optional[str] = None
     ticket_type: Optional[str] = None
     valid_until: Optional[str] = None
-# Pricing & discount logic
-BASE_PRICE_BY_TYPE = {
-    "single": 50.00,
-    "return": 90.00,
-}
-STUDENT_DISCOUNT_PERCENT = 50.0
+# ============================================================================
+# Pricing — lookup in tabela tariff_brackets (modeleaza Tariful 100 CFR)
+# ============================================================================
+# Reducere conform OUG 11/2024 + Legea 245/2024:
+#  - studenti < 30 ani, clasa II, transport feroviar intern, numar nelimitat
+STUDENT_DISCOUNT_PERCENT = 90.0
+# Doctoranzi conform HG 845/2009 (forma cu frecventa)
+DOCTORAL_DISCOUNT_PERCENT = 50.0
+# Bilet dus-intors = 2x tariful single (CFR nu ofera reducere pe return)
+RETURN_MULTIPLIER = 2.0
 
-def _compute_price(db: Session, user_id: int, ticket_type: str) -> tuple[float, float]:
-    """Returns (price_after_discount, discount_percent_applied)."""
-    base = BASE_PRICE_BY_TYPE.get(ticket_type, 50.00)
-    # Reducere automata 50% pentru student activ
-    has_student = db.execute(
+
+def _lookup_base_price(
+    db: Session, distance_km: float, train_category: str, train_class: int = 2
+) -> float:
+    """
+    Lookup in tariff_brackets pentru tariful clasa indicata.
+    Returneaza tariful single-trip ca float RON.
+    """
+    # Normalizam categoria: schema accepta 'R'/'IR'/'IC'/'IR-N'
+    cat_map = {
+        "regio": "R", "r": "R",
+        "interregio": "IR", "ir": "IR",
+        "intercity": "IC", "ic": "IC",
+        "express": "IR", "high_speed": "IC",
+    }
+    cat = cat_map.get((train_category or "IR").lower(), "IR")
+
+    row = db.execute(
         text(
             """
-            SELECT 1 FROM user_credentials
+            SELECT price_ron
+            FROM tariff_brackets
+            WHERE train_category = :cat
+              AND train_class    = :cls
+              AND km_from <= :km AND km_to >= :km
+              AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
+            LIMIT 1
+            """
+        ),
+        {"cat": cat, "cls": train_class, "km": int(distance_km)},
+    ).first()
+
+    if row:
+        return float(row[0])
+
+    # Fallback: daca nu gasim bracket, formula liniara
+    base = 17 + distance_km * 0.17
+    if cat == "IR":
+        base += 15 + distance_km * 0.025
+    elif cat == "IC":
+        base += 25 + distance_km * 0.04
+    if train_class == 1:
+        base *= 1.35
+    return round(base, 2)
+
+
+def _user_discount(db: Session, user_id: int) -> float:
+    """
+    Returneaza discountul aplicabil (in procente) pentru user.
+    Prioritizeaza student_verified > doctoral > 0.
+    """
+    cred_row = db.execute(
+        text(
+            """
+            SELECT credential_type FROM user_credentials
             WHERE user_id = :uid
-              AND credential_type = 'student'
               AND status = 'active'
               AND valid_until > CURRENT_TIMESTAMP
+              AND credential_type IN ('student', 'student_verified', 'doctoral_verified', 'pupil', 'elev_verified')
+            ORDER BY
+              CASE credential_type
+                WHEN 'student_verified'   THEN 1
+                WHEN 'student'            THEN 2
+                WHEN 'elev_verified'      THEN 3
+                WHEN 'pupil'              THEN 4
+                WHEN 'doctoral_verified'  THEN 5
+              END
             LIMIT 1
             """
         ),
         {"uid": user_id},
     ).first()
-    if has_student:
-        return round(base * (1 - STUDENT_DISCOUNT_PERCENT / 100), 2), STUDENT_DISCOUNT_PERCENT
-    return base, 0.0
+
+    if not cred_row:
+        return 0.0
+
+    cred_type = cred_row[0]
+    if cred_type in ("student", "student_verified", "elev_verified", "pupil"):
+        return STUDENT_DISCOUNT_PERCENT
+    if cred_type == "doctoral_verified":
+        return DOCTORAL_DISCOUNT_PERCENT
+    return 0.0
+
+
+def _compute_price(
+    db: Session,
+    user_id: int,
+    ticket_type: str,
+    train_id: int,
+    departure_station_id: int,
+    arrival_station_id: int,
+    train_class: int = 2,
+) -> tuple[float, float, float, float]:
+    """
+    Returns (final_price, discount_percent, base_price_single, distance_km).
+    """
+    # 1. Distanta totala intre statiile pe ruta trenului
+    train_row = db.execute(
+        text(
+            """
+            SELECT t.train_id, t.train_type, r.total_distance_km
+            FROM trains t
+            JOIN routes r ON r.route_id = t.route_id
+            WHERE t.train_id = :tid
+            """
+        ),
+        {"tid": train_id},
+    ).first()
+    if not train_row:
+        raise HTTPException(status_code=404, detail="Trenul nu exista")
+
+    _, train_type, total_km = train_row
+    # Demo: presupunem ca biletul acopera intreaga ruta a trenului
+    # (extensie viitoare: route_stops cu distanta de la origine pentru fiecare statie)
+    distance_km = float(total_km or 100.0)
+
+    # 2. Tarif single din tabel
+    base_single = _lookup_base_price(db, distance_km, train_type, train_class)
+
+    # 3. Multiplier pentru tip bilet (return = 2x)
+    multiplier = RETURN_MULTIPLIER if ticket_type == "return" else 1.0
+    base_total = round(base_single * multiplier, 2)
+
+    # 4. Discount student / doctoral
+    discount = _user_discount(db, user_id)
+    final_price = round(base_total * (1 - discount / 100), 2)
+
+    return final_price, discount, base_total, distance_km
 # Endpoints
+
+@router.post("/tickets/quote")
+def quote_ticket(
+    payload: BuyTicketRequest,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Calculeaza pretul biletului FARA a-l cumpara.
+    Foloseste tariff_brackets + discountul utilizatorului curent.
+    Util pentru UI: arata pretul inainte de confirmare.
+    """
+    user = _extract_user_from_token(authorization, db)
+    price, discount, base_price, distance_km = _compute_price(
+        db,
+        user["user_id"],
+        payload.ticket_type,
+        payload.train_id,
+        payload.departure_station_id,
+        payload.arrival_station_id,
+    )
+    return {
+        "base_price": base_price,
+        "discount_percent": discount,
+        "final_price": price,
+        "distance_km": distance_km,
+        "ticket_type": payload.ticket_type,
+        "savings": round(base_price - price, 2),
+    }
+
 @router.get("/tickets/catalog")
 def list_catalog(db: Session = Depends(get_db)):
     """Listeaza rute + trenuri disponibile pentru cumparare."""
@@ -154,7 +296,14 @@ def buy_ticket(
     if not train:
         raise HTTPException(status_code=404, detail="Trenul nu exista sau este inactiv")
 
-    price, discount = _compute_price(db, user["user_id"], payload.ticket_type)
+    price, discount, base_price, distance_km = _compute_price(
+        db,
+        user["user_id"],
+        payload.ticket_type,
+        payload.train_id,
+        payload.departure_station_id,
+        payload.arrival_station_id,
+    )
 
     try:
         # 1. Insereaza biletul

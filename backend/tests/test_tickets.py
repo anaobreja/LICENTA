@@ -109,7 +109,7 @@ class TestBuyTicket:
         assert resp.status_code == 403, "Conductorul nu trebuie sa poata cumpara bilete"
 
     def test_student_gets_discount(self, client):
-        """user.demo are credential student activ — verificam discount 50%."""
+        """user.demo are credential student activ — verificam discount 90% (OUG 11/2024)."""
         login = client.post(
             "/auth/login",
             json={"email": "user.demo@railwaydemo.com", "password": "demo2026"},
@@ -120,8 +120,8 @@ class TestBuyTicket:
         train = _get_first_train(client)
         resp = _buy_ticket(client, token, train)
         assert resp.status_code == 200, resp.text
-        assert resp.json()["discount_applied"] == 50.0, (
-            "Student cu credential activ trebuie sa primeasca 50% discount"
+        assert resp.json()["discount_applied"] == 90.0, (
+            "Student cu credential activ trebuie sa primeasca 90% discount"
         )
 
 class TestListMyTickets:

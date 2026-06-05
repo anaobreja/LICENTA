@@ -17,6 +17,7 @@ DROP VIEW IF EXISTS pending_student_benefits CASCADE;
 DROP VIEW IF EXISTS university_agent_summary CASCADE;
 
 DROP TABLE IF EXISTS audit_logs CASCADE;
+DROP TABLE IF EXISTS tariff_brackets CASCADE;
 DROP TABLE IF EXISTS validations CASCADE;
 DROP TABLE IF EXISTS qr_tokens CASCADE;
 DROP TABLE IF EXISTS travel_entitlements CASCADE;
@@ -514,6 +515,27 @@ CREATE INDEX idx_audit_logs_action_type ON audit_logs(action_type);
 CREATE INDEX idx_audit_logs_target_table ON audit_logs(target_table);
 CREATE INDEX idx_audit_logs_action_timestamp ON audit_logs(action_timestamp);
 -- VIEW: drepturi de calatorie active
+-- 23. TARIFF BRACKETS - tarifar pe trepte de distanta
+CREATE TABLE tariff_brackets (
+    id SERIAL PRIMARY KEY,
+    train_category VARCHAR(10) NOT NULL
+        CHECK (train_category IN ('R', 'IR', 'IC', 'IR-N')),
+    train_class    INTEGER NOT NULL DEFAULT 2
+        CHECK (train_class IN (1, 2)),
+    km_from INTEGER NOT NULL CHECK (km_from >= 0),
+    km_to   INTEGER NOT NULL CHECK (km_to > km_from),
+    price_ron NUMERIC(6, 2) NOT NULL CHECK (price_ron > 0),
+    valid_from DATE NOT NULL DEFAULT '2025-01-01',
+    valid_until DATE,
+    UNIQUE (train_category, train_class, km_from, km_to)
+);
+
+CREATE INDEX idx_tariff_brackets_lookup
+    ON tariff_brackets (train_category, train_class, km_from, km_to);
+
+COMMENT ON TABLE tariff_brackets IS 'Tarife pe trepte de distanta - aproximeaza Tariful 100 CFR Calatori';
+
+
 CREATE VIEW active_travel_entitlements AS
 SELECT
     te.entitlement_id,

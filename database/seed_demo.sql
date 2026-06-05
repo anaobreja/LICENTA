@@ -105,9 +105,65 @@ INSERT INTO digital_cards (user_id, issuer_id, card_identifier, status, valid_un
 INSERT INTO user_credentials (user_id, credential_type, claim_value, issuer_id, status, valid_until) VALUES
 (
     (SELECT user_id FROM users WHERE email = 'user.demo@railwaydemo.com'),
-    'student',
+    'student_verified',
     'UPB-2024-002:Calculatoare:An 3',
     (SELECT id FROM issuers WHERE name = 'Universitatea Politehnica Bucuresti (UPB)'),
     'active',
     CURRENT_TIMESTAMP + INTERVAL '300 days'
 );
+
+-- ==============================================================================
+-- 11. TARIFE PE TREPTE (Tariful 100 CFR — aproximare clasa II 2025)
+-- ==============================================================================
+-- Regio (R), clasa II — preturile de baza
+INSERT INTO tariff_brackets (train_category, train_class, km_from, km_to, price_ron) VALUES
+('R',  2,   0,   10,  5.00),
+('R',  2,  11,   25,  9.00),
+('R',  2,  26,   50, 15.00),
+('R',  2,  51,   75, 22.00),
+('R',  2,  76,  100, 30.00),
+('R',  2, 101,  150, 38.00),
+('R',  2, 151,  200, 48.00),
+('R',  2, 201,  300, 60.00),
+('R',  2, 301,  400, 75.00),
+('R',  2, 401,  500, 90.00),
+('R',  2, 501,  700,108.00),
+('R',  2, 701, 9999,128.00);
+
+-- InterRegio (IR), clasa II — base + supliment IR + rezervare
+INSERT INTO tariff_brackets (train_category, train_class, km_from, km_to, price_ron) VALUES
+('IR', 2,   0,   10, 12.00),
+('IR', 2,  11,   25, 18.00),
+('IR', 2,  26,   50, 27.00),
+('IR', 2,  51,   75, 38.00),
+('IR', 2,  76,  100, 48.00),
+('IR', 2, 101,  150, 56.00),
+('IR', 2, 151,  200, 67.00),
+('IR', 2, 201,  300, 82.00),
+('IR', 2, 301,  400,103.00),
+('IR', 2, 401,  500,127.00),
+('IR', 2, 501,  700,156.00),
+('IR', 2, 701, 9999,180.00);
+
+-- InterCity (IC), clasa II — base + supliment IC + rezervare obligatorie
+INSERT INTO tariff_brackets (train_category, train_class, km_from, km_to, price_ron) VALUES
+('IC', 2,   0,   50, 35.00),
+('IC', 2,  51,  100, 55.00),
+('IC', 2, 101,  150, 68.00),
+('IC', 2, 151,  200, 75.00),
+('IC', 2, 201,  300, 95.00),
+('IC', 2, 301,  500,135.00),
+('IC', 2, 501, 9999,180.00);
+
+-- Clasa I — supliment ~35% peste clasa II
+INSERT INTO tariff_brackets (train_category, train_class, km_from, km_to, price_ron) VALUES
+('R',  1,   0,  100, 42.00),
+('R',  1, 101,  300, 81.00),
+('R',  1, 301, 9999,140.00),
+('IR', 1,   0,  100, 65.00),
+('IR', 1, 101,  300,111.00),
+('IR', 1, 301,  500,170.00),
+('IR', 1, 501, 9999,235.00),
+('IC', 1,   0,  200,101.00),
+('IC', 1, 201,  500,180.00),
+('IC', 1, 501, 9999,240.00);
