@@ -63,35 +63,11 @@ INSERT INTO university_students (university_id, student_number, first_name, last
 ((SELECT university_id FROM universities WHERE short_name = 'UPB'),    'UPB-2024-002', 'Demo',   'User',    'Automatica si Calculatoare', 'Calculatoare',         3, '2022-10-01'),
 ((SELECT university_id FROM universities WHERE short_name = 'ASE'),    'ASE-2024-001', 'Maria',  'Popa',    'Cibernetica',               'Informatica Economica', 1, '2024-10-01'),
 ((SELECT university_id FROM universities WHERE short_name = 'UNIBUC'), 'UB-2024-001',  'Vlad',   'Mihai',   'Matematica si Informatica', 'Informatica',          2, '2023-10-01');
--- 5. OPERATORI FEROVIARI
-INSERT INTO railway_operators (name, code, country, contact_email) VALUES
-('CFR Calatori',     'CFR',  'Romania', 'contact@cfrcalatori.ro'),
-('Softrans',         'STR',  'Romania', 'contact@softrans.ro'),
-('Astra Trans Carpatic', 'ATC', 'Romania', 'contact@astratranscarpatic.ro');
--- 6. STATII
-INSERT INTO stations (name, code, city) VALUES
-('Bucuresti Nord',  'BUH', 'Bucuresti'),
-('Brasov',          'BRV', 'Brasov'),
-('Cluj-Napoca',     'CJN', 'Cluj-Napoca'),
-('Timisoara Nord',  'TMN', 'Timisoara'),
-('Iasi',            'IAS', 'Iasi'),
-('Constanta',       'CTA', 'Constanta'),
-('Sibiu',           'SBU', 'Sibiu'),
-('Ploiesti Sud',    'PLO', 'Ploiesti');
--- 7. RUTE (cateva exemple)
-INSERT INTO routes (operator_id, route_name, route_code, origin_station_id, destination_station_id, total_distance_km) VALUES
-((SELECT operator_id FROM railway_operators WHERE code = 'CFR'), 'Bucuresti - Brasov',     'CFR-BUH-BRV', (SELECT station_id FROM stations WHERE code = 'BUH'), (SELECT station_id FROM stations WHERE code = 'BRV'), 166.0),
-((SELECT operator_id FROM railway_operators WHERE code = 'CFR'), 'Bucuresti - Cluj-Napoca','CFR-BUH-CJN', (SELECT station_id FROM stations WHERE code = 'BUH'), (SELECT station_id FROM stations WHERE code = 'CJN'), 497.0),
-((SELECT operator_id FROM railway_operators WHERE code = 'CFR'), 'Bucuresti - Constanta',  'CFR-BUH-CTA', (SELECT station_id FROM stations WHERE code = 'BUH'), (SELECT station_id FROM stations WHERE code = 'CTA'), 225.0),
-((SELECT operator_id FROM railway_operators WHERE code = 'STR'), 'Bucuresti - Timisoara',  'STR-BUH-TMN', (SELECT station_id FROM stations WHERE code = 'BUH'), (SELECT station_id FROM stations WHERE code = 'TMN'), 533.0),
-((SELECT operator_id FROM railway_operators WHERE code = 'ATC'), 'Bucuresti - Iasi',       'ATC-BUH-IAS', (SELECT station_id FROM stations WHERE code = 'BUH'), (SELECT station_id FROM stations WHERE code = 'IAS'), 405.0);
--- 8. TRENURI
-INSERT INTO trains (operator_id, route_id, train_number, train_type, capacity_seats) VALUES
-((SELECT operator_id FROM railway_operators WHERE code = 'CFR'), (SELECT route_id FROM routes WHERE route_code = 'CFR-BUH-BRV'), 'IR-1621', 'interregio', 300),
-((SELECT operator_id FROM railway_operators WHERE code = 'CFR'), (SELECT route_id FROM routes WHERE route_code = 'CFR-BUH-CJN'), 'IR-1841', 'interregio', 350),
-((SELECT operator_id FROM railway_operators WHERE code = 'CFR'), (SELECT route_id FROM routes WHERE route_code = 'CFR-BUH-CTA'), 'IC-672',  'intercity',  280),
-((SELECT operator_id FROM railway_operators WHERE code = 'STR'), (SELECT route_id FROM routes WHERE route_code = 'STR-BUH-TMN'), 'S-100',   'interregio', 250),
-((SELECT operator_id FROM railway_operators WHERE code = 'ATC'), (SELECT route_id FROM routes WHERE route_code = 'ATC-BUH-IAS'), 'ATC-201', 'intercity',  220);
+-- 5-8. OPERATORI / STATII / RUTE / TRENURI:
+--      Populate exclusiv din date oficiale CFR (data.gov.ro)
+--      via `python database/import_cfr.py`.
+--      Nu mai includ trenuri demo hardcodate pentru a evita conflicte cu codurile XML.
+
 -- 9. CARD DIGITAL pentru user.demo (ca sa mearga "Card Digital" out-of-the-box)
 INSERT INTO digital_cards (user_id, issuer_id, card_identifier, status, valid_until) VALUES
 (

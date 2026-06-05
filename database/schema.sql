@@ -8,6 +8,8 @@
 --   * Index pe coloane folosite frecvent in WHERE / JOIN
 --   * TIMESTAMP fara TZ (aplicatia normalizeaza la UTC in Python)
 -- DROP ORDER: dinspre dependinte spre tabele de baza
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
 DROP VIEW IF EXISTS v_user_credentials_active CASCADE;
 DROP VIEW IF EXISTS v_validations_summary CASCADE;
 DROP VIEW IF EXISTS active_travel_entitlements CASCADE;
@@ -371,14 +373,15 @@ CREATE TABLE trains (
     train_id SERIAL PRIMARY KEY,
     operator_id INTEGER NOT NULL,
     route_id INTEGER NOT NULL,
-    train_number VARCHAR(50) NOT NULL UNIQUE,
+    train_number VARCHAR(50) NOT NULL,
     train_type VARCHAR(50) NOT NULL
         CHECK (train_type IN ('regio', 'interregio', 'intercity', 'express', 'high_speed')),
     capacity_seats INTEGER,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (operator_id) REFERENCES railway_operators(operator_id) ON DELETE RESTRICT,
-    FOREIGN KEY (route_id) REFERENCES routes(route_id) ON DELETE RESTRICT
+    FOREIGN KEY (route_id) REFERENCES routes(route_id) ON DELETE RESTRICT,
+    UNIQUE (operator_id, train_number)
 );
 
 CREATE INDEX idx_trains_operator_id ON trains(operator_id);
