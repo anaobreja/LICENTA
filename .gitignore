@@ -91,3 +91,7 @@ coverage.xml
 # Junk files from accidental shell commands
 0)
 FAIL
+
+# Local exploratory scripts (not part of the application)
+check_*.py
+compare*.py

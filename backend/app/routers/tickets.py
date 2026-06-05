@@ -176,12 +176,16 @@ def _compute_price(
 ) -> tuple[float, float, float, float]:
     """
     Returns (final_price, discount_percent, base_price_single, distance_km).
+
+    Distanta = diferenta de distance_from_origin_km intre stop-ul de plecare
+    si stop-ul de sosire pe ruta trenului (din tabela route_stops).
+    Daca pasagerul cere o relatie pe care trenul nu o acopera, fallback la
+    total_distance_km pentru a nu bloca cumpararea.
     """
-    # 1. Distanta totala intre statiile pe ruta trenului
     train_row = db.execute(
         text(
             """
-            SELECT t.train_id, t.train_type, r.total_distance_km
+            SELECT t.train_id, t.train_type, t.route_id, r.total_distance_km
             FROM trains t
             JOIN routes r ON r.route_id = t.route_id
             WHERE t.train_id = :tid
@@ -192,24 +196,143 @@ def _compute_price(
     if not train_row:
         raise HTTPException(status_code=404, detail="Trenul nu exista")
 
-    _, train_type, total_km = train_row
-    # Demo: presupunem ca biletul acopera intreaga ruta a trenului
-    # (extensie viitoare: route_stops cu distanta de la origine pentru fiecare statie)
-    distance_km = float(total_km or 100.0)
+    _, train_type, route_id, total_km = train_row
 
-    # 2. Tarif single din tabel
+    # Distanta efectiva intre cele doua statii pe ruta trenului
+    seg = db.execute(
+        text(
+            """
+            SELECT
+                MIN(CASE WHEN station_id = :dep THEN distance_from_origin_km END) AS dep_km,
+                MIN(CASE WHEN station_id = :arr THEN distance_from_origin_km END) AS arr_km,
+                MIN(CASE WHEN station_id = :dep THEN stop_order END) AS dep_order,
+                MIN(CASE WHEN station_id = :arr THEN stop_order END) AS arr_order
+            FROM route_stops
+            WHERE route_id = :rid AND station_id IN (:dep, :arr)
+            """
+        ),
+        {"rid": route_id, "dep": departure_station_id, "arr": arrival_station_id},
+    ).first()
+
+    if seg and seg.dep_km is not None and seg.arr_km is not None:
+        distance_km = abs(float(seg.arr_km) - float(seg.dep_km))
+        if distance_km < 1:
+            distance_km = float(total_km or 50.0)
+    else:
+        distance_km = float(total_km or 50.0)
+
     base_single = _lookup_base_price(db, distance_km, train_type, train_class)
-
-    # 3. Multiplier pentru tip bilet (return = 2x)
     multiplier = RETURN_MULTIPLIER if ticket_type == "return" else 1.0
     base_total = round(base_single * multiplier, 2)
 
-    # 4. Discount student / doctoral
     discount = _user_discount(db, user_id)
     final_price = round(base_total * (1 - discount / 100), 2)
 
     return final_price, discount, base_total, distance_km
 # Endpoints
+
+
+@router.get("/stations/search")
+def search_stations(
+    q: str = "",
+    limit: int = 15,
+    db: Session = Depends(get_db),
+):
+    """
+    Autocomplete pentru statii.
+    Query: name sau city ILIKE '%q%'. Sortare: nume, alfabetic.
+    """
+    q = (q or "").strip()
+    if len(q) < 2:
+        # returnez statii populare (cele mai multe trenuri trecand prin ele)
+        rows = db.execute(
+            text(
+                """
+                SELECT s.station_id, s.name, s.city, s.code, COUNT(rs.route_stop_id) AS popularity
+                FROM stations s
+                LEFT JOIN route_stops rs ON rs.station_id = s.station_id
+                WHERE s.is_active = TRUE
+                GROUP BY s.station_id
+                ORDER BY popularity DESC, s.name ASC
+                LIMIT :lim
+                """
+            ),
+            {"lim": limit},
+        ).mappings().all()
+    else:
+        like = f"%{q}%"
+        rows = db.execute(
+            text(
+                """
+                SELECT s.station_id, s.name, s.city, s.code, COUNT(rs.route_stop_id) AS popularity
+                FROM stations s
+                LEFT JOIN route_stops rs ON rs.station_id = s.station_id
+                WHERE s.is_active = TRUE
+                  AND (unaccent(s.name) ILIKE unaccent(:q) OR unaccent(s.city) ILIKE unaccent(:q) OR s.code ILIKE :q)
+                GROUP BY s.station_id
+                ORDER BY popularity DESC, s.name ASC
+                LIMIT :lim
+                """
+            ),
+            {"q": like, "lim": limit},
+        ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+@router.get("/trains/search")
+def search_trains(
+    from_station_id: int,
+    to_station_id: int,
+    travel_date: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Cauta trenurile care leaga 2 statii pe acelasi tren (directe).
+    Conditia: ambele statii sunt opriri pe aceeasi ruta, ordinea corecta.
+    """
+    if from_station_id == to_station_id:
+        raise HTTPException(status_code=400, detail="Statiile trebuie sa fie diferite")
+
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                t.train_id, t.train_number, t.train_type,
+                op.name AS operator_name, op.code AS operator_code,
+                r.route_id, r.route_name,
+                s_from.station_id AS from_id, s_from.name AS from_name, s_from.code AS from_code,
+                s_to.station_id   AS to_id,   s_to.name   AS to_name,   s_to.code   AS to_code,
+                rs_from.stop_order AS from_order,
+                rs_to.stop_order   AS to_order,
+                rs_from.departure_time AS departure_time,
+                rs_to.arrival_time     AS arrival_time,
+                (rs_to.distance_from_origin_km - rs_from.distance_from_origin_km) AS distance_km
+            FROM trains t
+            JOIN routes r          ON r.route_id = t.route_id
+            JOIN railway_operators op ON op.operator_id = t.operator_id
+            JOIN route_stops rs_from ON rs_from.route_id = r.route_id AND rs_from.station_id = :from_id
+            JOIN route_stops rs_to   ON rs_to.route_id   = r.route_id AND rs_to.station_id   = :to_id
+            JOIN stations s_from ON s_from.station_id = rs_from.station_id
+            JOIN stations s_to   ON s_to.station_id   = rs_to.station_id
+            WHERE t.is_active = TRUE
+              AND rs_from.stop_order < rs_to.stop_order
+            ORDER BY rs_from.departure_time NULLS LAST, t.train_number
+            LIMIT 50
+            """
+        ),
+        {"from_id": from_station_id, "to_id": to_station_id},
+    ).mappings().all()
+
+    return [
+        {
+            **dict(r),
+            "departure_time": str(r["departure_time"]) if r["departure_time"] else None,
+            "arrival_time": str(r["arrival_time"]) if r["arrival_time"] else None,
+            "distance_km": float(r["distance_km"]) if r["distance_km"] else None,
+        }
+        for r in rows
+    ]
+
 
 @router.post("/tickets/quote")
 def quote_ticket(

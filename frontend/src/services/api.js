@@ -418,3 +418,15 @@ export const quoteTicket = ({
       ticket_type,
     }),
   })
+
+export const searchStations = (q = '', limit = 15) =>
+  apiCall(`/stations/search?q=${encodeURIComponent(q)}&limit=${limit}`)
+
+export const searchTrains = (fromStationId, toStationId, travelDate = null) => {
+  const qs = new URLSearchParams({
+    from_station_id: String(fromStationId),
+    to_station_id: String(toStationId),
+  })
+  if (travelDate) qs.set('travel_date', travelDate)
+  return apiCall(`/trains/search?${qs.toString()}`)
+}
