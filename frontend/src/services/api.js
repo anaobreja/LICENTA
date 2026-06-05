@@ -101,13 +101,34 @@ export const register = async ({
 
   const response = await fetch(url, { method: 'POST', body: formData })
   if (!response.ok) {
-    let errorMessage = `HTTP ${response.status}`
+    let errorMessage = `Eroare ${response.status}`
     try {
       const errorData = await response.json()
       if (errorData?.detail) {
-        errorMessage = typeof errorData.detail === 'string'
-          ? errorData.detail
-          : JSON.stringify(errorData.detail)
+        if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail
+        } else if (Array.isArray(errorData.detail)) {
+          // Pydantic 422 — formatez fiecare eroare ca "Camp: mesaj"
+          const fieldLabels = {
+            email: 'Email', password: 'Parola', phone: 'Telefon',
+            first_name: 'Prenume', last_name: 'Nume',
+            university_name: 'Universitate',
+          }
+          errorMessage = errorData.detail.map(err => {
+            const field = err.loc?.[err.loc.length - 1] || ''
+            const label = fieldLabels[field] || field
+            const msg = err.msg || 'Valoare invalida'
+            // Traducere mesaje uzuale
+            const friendly = msg
+              .replace(/String should have at least (\d+) characters/, 'minim $1 caractere')
+              .replace(/String should have at most (\d+) characters/, 'maxim $1 caractere')
+              .replace(/value is not a valid email address.*/, 'email invalid')
+              .replace(/field required/i, 'camp obligatoriu')
+            return label ? `${label}: ${friendly}` : friendly
+          }).join('. ')
+        } else {
+          errorMessage = JSON.stringify(errorData.detail)
+        }
       }
     } catch (_) { /* ignore */ }
     throw new Error(errorMessage)

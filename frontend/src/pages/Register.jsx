@@ -24,8 +24,17 @@ function Register() {
     setError('')
     setSuccess('')
 
-    if (!form.phone.trim()) {
+    const phone = form.phone.trim()
+    if (!phone) {
       setError('Numărul de telefon este obligatoriu.')
+      return
+    }
+    if (phone.length < 8) {
+      setError('Numărul de telefon trebuie să aibă cel puțin 8 caractere.')
+      return
+    }
+    if (form.password.length < 8) {
+      setError('Parola trebuie să aibă cel puțin 8 caractere.')
       return
     }
     setLoading(true)
