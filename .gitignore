@@ -79,3 +79,15 @@ logs/
 # Misc local helpers
 _run_tests.bat
 _tests.log
+_be.log
+_*.py
+_*.log
+
+# Test coverage artifacts
+.coverage
+htmlcov/
+coverage.xml
+
+# Junk files from accidental shell commands
+0)
+FAIL
