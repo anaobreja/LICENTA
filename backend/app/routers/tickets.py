@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.core.roles import ROLE_PASSENGER, ROLE_TRAIN_VERIFIER, has_role, normalize_role
+
 from app.core.security import decode_token
 from app.services.ticket_business import (
     check_overlap,
