@@ -8,7 +8,7 @@ graph TB
         FE["React 18 + Vite\nTailwind CSS + Recharts\nhtml5-qrcode"]
     end
 
-    subgraph Server["Server (localhost)"]
+    subgraph Server["Server (localhost / Docker container)"]
         PS["Proxy Server\n:8765\nproxy_server.py"]
         API["FastAPI Backend\n:8000\nuvicorn"]
         OCR["easyocr\nMRZ Parser\n(lazy load)"]
@@ -17,14 +17,12 @@ graph TB
     subgraph Persistence["Persistență"]
         DB[(PostgreSQL 16\nrailway_db)]
         FS["Fișiere\nuploads/documents/"]
-        PG[(PostgreSQL\nopțional)]
     end
 
     FE -->|"HTTP /api/*"| PS
     FE -->|"fișiere statice /dist"| PS
     PS -->|"proxy /api → :8000"| API
     API -->|"SQLAlchemy ORM"| DB
-    API -->|"SQLAlchemy ORM"| PG
     API -->|"FileResponse"| FS
     API -->|"readtext(img)"| OCR
 ```
@@ -36,13 +34,13 @@ graph TB
 ```mermaid
 graph TD
     subgraph Frontend["Frontend — React"]
-        Pages["Pages\nDashboard · Documents\nPresentIdentity · VerifyPresentation\nUniversityAgentDashboard · AdminDashboard"]
+        Pages["Pages\nDashboard · Documents\nPresentIdentity · VerifyPresentation\nUniversityAgentDashboard · AdminDashboard\nBuyTicket · MyTickets · ValidateTicket\nMapView · TravelHistory · Credentials\nNotifications · Profile · Settings"]
         Components["Components\nNavigation · ProtectedRoute · Toast"]
         Services["Services\napi.js — fetch wrapper"]
     end
 
     subgraph Backend["Backend — FastAPI"]
-        Routers["Routers\n/auth · /users · /identity\n/university/stats"]
+        Routers["Routers\n/auth · /users · /identity\n/university/stats\n/map · /tickets · /map/personal-route · /crypto"]
         Core["Core\nsecurity.py — JWT + TOTP + QR\ndatabase.py — SQLAlchemy + seed\nconfig.py — Settings\nroles.py — RBAC"]
     end
 
@@ -51,6 +49,7 @@ graph TD
         DocsT["source_documents\ndocument_reviews"]
         CredT["user_credentials · issuers\ndigital_cards · card_presentations\ncard_verifications"]
         NotifT["notifications"]
+        TransportT["railway_operators · stations\nroutes · route_stops · trains\ntickets · subscriptions · travel_entitlements\nqr_tokens · validations · tariff_brackets\naudit_logs"]
     end
 
     Pages --> Services
@@ -78,7 +77,10 @@ graph TD
 | OCR | easyocr | 1.7+ |
 | QR generare | qrcode | 7.4 |
 | Baza de date | PostgreSQL 16 | Docker container (`docker-compose up -d db`) |
-| Baza de date (prod) | PostgreSQL | 15+ |
+| Cryptografie offline | Ed25519 (cryptography) | 41+ |
+| Testare backend | pytest | 7.4 |
+| Testare frontend | Node Web Crypto API | nativ |
+| Load testing | locust | 2.x |
 | Containerizare | Docker + Docker Compose | — |
 
 ---
