@@ -108,9 +108,17 @@ graph TD
     PT --> UC33[Validare bilet în tren - prin QR sau token]
     PT --> UC34[Vizualizare istoric călătorii]
     PT --> UC35[Calculare rută personală - universitate spre destinație]
+    PT --> UC41[Selectare loc in vagon - hold 5 min real-time]
+    PT --> UC42[Anulare bilet cu refund pe trepte CFR]
+    PT --> UC43[Reprogramare bilet pe acelasi traseu, alt tren/data]
+    UC44[Anti-overlap intervale orare] -.->|constraint| UC31
+    UC44 -.->|constraint| UC43
 
     UC31 -.->|include| UC30
     UC33 -.->|include| UC32
+    UC31 -.->|extend| UC41
+    UC42 -.->|extend| UC32
+    UC43 -.->|extend| UC32
 ```
 
 ---
@@ -164,3 +172,102 @@ graph TD
 - **Precondiție:** Aplicația agentului are cheia publică Ed25519 a issuer-ului cache-uită local (descărcată din JWKS la ultima conexiune online)
 - **Flux:** Agent scanează QR-ul / introduce token-ul → aplicația verifică semnătura JWS local, în browser, folosind **Web Crypto API (algoritm Ed25519)** → validează `exp`, `nbf`, `iss` și `aud` fără apel la server → afișează rezultatul VALID/INVALID și claims-urile pasagerului
 - **Postcondiție:** Validarea este efectuată complet offline; rezultatul și claims-urile sunt vizibile agentului; evenimentul de validare este pus într-o coadă locală și sincronizat în `card_verifications` la reconectare
+
+### UC41 - Selectare loc in vagon (real-time)
+
+**Actor:** Pasager
+
+**Precondi?ii:** Pasagerul este �n procesul de cumparare a unui bilet ?i a selectat
+un tren ?i o data.
+
+**Flux:**
+1. Sistemul afi?eaza harta vagoanelor trenului (Regio=3 vagoane, IR=5, IC=7,
+   fiecare cu 60 locuri �n layout 2+2 cu culoar central).
+2. Fiecare loc are status vizual: liber (alb), selec?ia ta (galben), v�ndut
+   (ro?u), hold de alt user (portocaliu), deja cumparat de tine (albastru).
+3. Pasagerul face click pe un loc liber.
+4. Sistemul tine locul rezervat 5 minute (`seat_reservations` cu `expires_at`).
+5. Pe alte device-uri (alti pasageri), locul apare ca portocaliu (indisponibil).
+6. La click din nou pe locul propriu, hold-ul este eliberat (toggle).
+7. La confirmarea cumpararii (UC31), hold-ul devine v�nzare (`ticket_seats`).
+8. Daca nu confirma �n 5 minute, hold-ul expira automat ?i locul redevine liber.
+
+**Postcondi?ii:** Locul este marcat ca v�ndut pentru data ?i trenul respective.
+Schimbarile sunt vizibile live (polling 5s) pentru ceilal?i useri.
+
+---
+
+### UC42 - Anulare bilet cu refund pe trepte CFR
+
+**Actor:** Pasager
+
+**Precondi?ii:** Pasagerul are un bilet activ ne-utilizat (`ticket_status='active'`).
+
+**Flux:**
+1. Pasagerul deschide pagina "Biletele mele" ?i apasa "Anulare" pe un bilet activ.
+2. Modal de confirmare afi?eaza refund-ul estimat conform regulamentului CFR:
+   - **>24h** �nainte de plecare: 100% refund
+   - **1m - 24h** �nainte de plecare: 50% refund
+   - **0** sau dupa plecare: 0% refund (nu se acorda)
+3. Pasagerul confirma.
+4. Sistemul:
+   - Marcheaza biletul `cancelled` + populeaza `cancel_refund_amount`
+   - Elibereaza instantaneu locul (?terge `ticket_seats`) - alti pasageri pot
+     cumpara acela?i loc imediat.
+   - Invalideaza `travel_entitlements` ?i `qr_tokens` asociate
+   - Creeaza notificare cu suma de refund
+5. Raspuns: `{refund_amount, refund_tier, seats_released}`
+
+**Postcondi?ii:** Biletul ramane vizibil �n istoric cu status "Anulat" ?i suma
+refund. Locul este disponibil pentru reluarea v�nzarii.
+
+---
+
+### UC43 - Reprogramare bilet (acela?i traseu, alt tren / data)
+
+**Actor:** Pasager
+
+**Precondi?ii:** Bilet activ, trenul nu a plecat �nca, exista alte trenuri pe
+acela?i traseu.
+
+**Flux:**
+1. Pasagerul apasa "Reprogramare" pe bilet.
+2. Modal cu selector data + lista trenuri disponibile pe acela?i origin/destination.
+3. Pasagerul alege noul tren + (op?ional) locuri noi prin SeatMap.
+4. Sistemul valideaza:
+   - Trenul nou este pe **acela?i traseu** (`origin_station_id` ?i
+     `destination_station_id` identice) - altfel 409 `different_route`.
+   - Noul interval orar nu se suprapune cu alte bilete active ale userului.
+   - Trenul nu a plecat �nca.
+5. Tranzac?ie atomica:
+   - Elibereaza locurile vechi
+   - Marcheaza biletul vechi `rescheduled` (cu link la cel nou)
+   - Creeaza bilet nou clonat (acela?i pret, traseu, tip), legat invers
+   - Muta `travel_entitlements` pe biletul nou
+   - Notificare
+
+**Postcondi?ii:** Lan? `rescheduled_from_ticket_id` <-> `rescheduled_to_ticket_id`
+trasabil. **Diferen?a de pret nu se restituie** (regula CFR).
+
+---
+
+### UC44 - Constr�ngere anti-overlap (cross-cutting)
+
+**Tip:** Constr�ngere de business aplicata la UC31 (cumparare) ?i UC43
+(reprogramare).
+
+**Regula:** Un user nu poate avea simultan doua bilete active �n intervale orare
+suprapuse, indiferent de tren sau traseu.
+
+**Algoritm:**
+1. Calculeaza intervalul `[new_dep, new_arr]` pentru noul tren + data
+   (din `route_stops` prima ?i ultima oprire pe ruta).
+2. Selecteaza biletele active ale userului din `travel_date +/- 1 zi`
+   (acopera ?i trenurile de noapte care trec peste miezul nop?ii).
+3. Pentru fiecare bilet existent, calculeaza `[ex_dep, ex_arr]`.
+4. Daca `new_dep < ex_arr AND ex_dep < new_arr` -> **conflict**.
+5. Raspunde 409 cu detalii: trenul �n conflict, intervalul lui, ID-ul biletului.
+
+**Justificare:** Pasagerul fizic nu poate fi �n doua trenuri �n acela?i timp.
+Aceasta regula previne ?i fraudele de tip "rezervare multipla speculativa"
+(blocare locuri �n trenuri diferite pentru a alege ulterior).

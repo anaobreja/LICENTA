@@ -34,7 +34,8 @@ Sistem de gestionare a **identității digitale** pentru studenți, cu verificar
 - Baza de date: 25 tabele organizate în 4 module logice (identitate, transport feroviar, bilete, audit), normalizată 3NF (PostgreSQL)
 - Containerizare Docker + Docker Compose (varianta PostgreSQL)
 - **Verificare offline a cardului digital prin semnături Ed25519** (controlorul poate valida QR-ul fără semnal — vezi secțiunea dedicată mai jos)
-- **Test automate**: 150 teste backend (pytest) + 19 teste frontend (Node + Web Crypto API), toate trec
+- **Sistem complet de bilete cu logică CFR realistă**: selecție loc real-time (hold 5 min), anti-overlap pe intervale orare, anulare cu refund pe trepte (100% / 50% / 0%), reprogramare pe același traseu — vezi secțiunea dedicată mai jos
+- **Test automate**: 168 teste backend (pytest, 18 noi pentru sistemul de bilete) + 19 teste frontend (Node + Web Crypto API), toate trec
 
 ### Work in progress / Limitări cunoscute
 
@@ -185,6 +186,68 @@ cd frontend && node tests/test_offline_verify.mjs
   aceleasi rezultate ca `signing.py` din backend, inclusiv pe edge case-uri
   de base64url (padding 0/1/2 chars, caractere unicode, semnaturi
   modificate, chei substituite, expirare).
+
+---
+
+## Sistem de bilete avansat
+
+Pe lângă identitatea digitală, platforma include un modul complet de
+vânzare bilete cu logică de business realistă (inspirat de regulamentul
+CFR Călători).
+
+### Funcționalități
+
+| Capacitate | Detalii |
+|---|---|
+| **Anti-overlap** | Sistemul refuză cumpărarea unui bilet dacă utilizatorul are deja un bilet activ pe un interval orar suprapus (HTTP 409 cu detalii despre conflict). |
+| **Selecție de loc real-time** | Hartă interactivă a vagoanelor cu locuri marcate liber / rezervat / vândut. Click pe loc → hold de 5 minute. Polling la 5s pentru actualizare live. |
+| **Vagoane variabile per tip tren** | Regio = 3 vagoane (180 locuri), InterRegio = 5 (300), InterCity = 7 (420). Vagonul 1 = clasa 1, restul clasa 2. Layout 2+2 (A·B │ C·D). |
+| **Anulare cu refund pe trepte CFR** | >24h înainte de plecare → 100% refund. 1m–24h → 50%. După plecare → 0%. Locurile redevin instant disponibile pentru alți useri. |
+| **Reprogramare pe același traseu** | Permisă doar pe trenuri cu aceleași stații de plecare/sosire. Diferența de preț nu se restituie (conform CFR). Lanț de bilete legate prin `rescheduled_from/to_ticket_id`. |
+
+### Arhitectură (4 tabele noi)
+
+```
+train_cars         — vagoanele unui tren (numar, capacitate, clasa)
+seats              — locurile individuale dintr-un vagon (label '14B', is_window, etc.)
+seat_reservations  — hold-uri temporare 5 minute pe (seat, travel_date)
+ticket_seats       — locuri vândute, legate de un ticket activ
+```
+
+Plus coloane noi pe `tickets`: `cancelled_at`, `cancel_refund_amount`,
+`rescheduled_from_ticket_id`, `rescheduled_to_ticket_id`.
+
+### Endpoint-uri noi
+
+| Metodă | Path | Descriere |
+|---|---|---|
+| `GET` | `/trains/{id}/seats?travel_date=YYYY-MM-DD` | Layout-ul trenului + status per loc (free / held / sold / mine_*) |
+| `POST` | `/seats/hold` | Rezervă temporar un loc (5 minute) |
+| `POST` | `/seats/release` | Eliberează un hold (idempotent) |
+| `POST` | `/tickets/{id}/cancel` | Anulare + refund automat conform trepte CFR |
+| `POST` | `/tickets/{id}/reschedule` | Reprogramare pe alt tren cu același traseu |
+
+### Demo "wow" la aparăre
+
+Sistemul permite un demo live impresionant pe **două device-uri**:
+
+1. **Laptop:** login `user.demo` → BuyTicket → selectezi tren IR → vezi harta cu toate locurile libere.
+2. **Click pe loc 14B în Vagon 2** → devine galben (rezervat pentru tine).
+3. **Telefon:** login `pasager.demo` → același tren → **vezi locul 14B deja gri (indisponibil)**.
+4. **Laptop:** confirmi cumpărarea → 14B devine roșu (vândut).
+5. **Laptop:** apesi "Anulează" → în 2 secunde, pe telefon locul 14B revine la verde.
+
+### Teste (18 noi, toate trec)
+
+Backend: `tests/integration/test_seats.py`. Acoperă 5 categorii:
+
+- **Anti-overlap** (4 teste): suprapunere exactă, parțială, date diferite, useri diferiți
+- **Refund tiers** (3 teste): >24h, 1–24h, după plecare
+- **Cancel** (4 teste): full refund, nu de 2 ori, doar own ticket, recumpărare după cancel
+- **Seat hold flow** (5 teste): layout, hold, release, conflict cu alt user, buy cu locuri
+- **Reschedule** (2 teste): același traseu OK, traseu diferit → 409
+
+---
 
 ---
 
