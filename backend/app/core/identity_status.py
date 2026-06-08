@@ -35,7 +35,7 @@ FROZEN_FIELDS_WHEN_VERIFIED = {
     "cnp",
     "first_name",
     "last_name",
-    "birth_date",
+    "date_of_birth",
     "home_station_id",
 }
 

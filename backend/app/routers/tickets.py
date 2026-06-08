@@ -18,6 +18,7 @@ from app.services.ticket_business import (
     get_train_departure_datetime,
     release_ticket_seats,
 )
+from app.services.subscription_business import find_active_subscription_for_route
 
 router = APIRouter(tags=["tickets"])
 # DB session dependency
@@ -542,6 +543,17 @@ def buy_ticket(
     # pentru acelasi user. Raise 409 cu detalii despre conflict.
     check_overlap(db, user["user_id"], payload.train_id, travel_date)
 
+    # Verificare abonament activ care acopera ruta (pentru gratuitate automata).
+    # Daca user-ul are subscription_scope='route' activ pe (from,to) sau (to,from),
+    # biletul va fi gratuit (price=0) si va fi marcat cu uses_subscription_id.
+    _covering_sub = find_active_subscription_for_route(
+        db,
+        user_id=user["user_id"],
+        from_station_id=payload.departure_station_id,
+        to_station_id=payload.arrival_station_id,
+        travel_date=travel_date,
+    )
+
     # Validare ca trenul + rutele exista
     train = db.execute(
         text("SELECT train_id, route_id FROM trains WHERE train_id = :tid AND is_active = TRUE"),
@@ -632,6 +644,21 @@ def buy_ticket(
                 "expires_at": valid_until,
             },
         ).mappings().first()
+
+        # 4a. Daca exista abonament activ care acopera ruta, marcam biletul
+        # ca gratuit: price=0, uses_subscription_id setat. Restul logicii (QR,
+        # entitlement) ramane neschimbat — biletul ramane valid pentru validare.
+        if _covering_sub:
+            db.execute(
+                text("""
+                    UPDATE tickets
+                    SET price = 0,
+                        discount_applied = 100,
+                        uses_subscription_id = :sub_id
+                    WHERE ticket_id = :tid
+                """),
+                {"sub_id": _covering_sub["subscription_id"], "tid": ticket["ticket_id"]},
+            )
 
         # 4. Confirma locurile rezervate prin /seats/hold (daca exista).
         # Daca hold-ul a expirat sau locul a fost vandut intre timp, raise 409

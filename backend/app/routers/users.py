@@ -213,7 +213,7 @@ def update_me(
         # Aducem starea curenta a userului pentru comparare cu payload
         current_row = db.execute(
             text("""
-                SELECT cnp, first_name, last_name, birth_date, home_station_id
+                SELECT cnp, first_name, last_name, date_of_birth, home_station_id
                 FROM users WHERE user_id = :uid
             """),
             {"uid": user_id},
