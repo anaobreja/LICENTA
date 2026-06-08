@@ -15,6 +15,7 @@ import UniversityAgentDashboard from './pages/UniversityAgentDashboard'
 import Settings from './pages/Settings'
 import BuyTicket from './pages/BuyTicket'
 import MyTickets from './pages/MyTickets'
+import Subscriptions from './pages/Subscriptions'
 import TravelHistory from './pages/TravelHistory'
 import ValidateTicket from './pages/ValidateTicket'
 import MapView from './pages/MapView'
@@ -172,6 +173,15 @@ function App() {
             element={
               <ProtectedRoute isAuthenticated={isAuthenticated} user={user} role="passenger">
                 <BuyTicket />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/subscriptions"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated} user={user} role="passenger">
+                <Subscriptions />
               </ProtectedRoute>
             }
           />

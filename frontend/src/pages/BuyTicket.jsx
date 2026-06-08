@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { buyTicket, quoteTicket, searchStations, searchTrains } from '../services/api'
+import { buyTicket, getMySubscriptions, quoteTicket, searchStations, searchTrains } from '../services/api'
 import SeatMap from '../components/SeatMap'
 
 const TYPE_LABEL = { single: 'Bilet simplu', return: 'Dus-intors' }
@@ -73,12 +73,40 @@ export default function BuyTicket() {
   const [ticketType, setTicketType] = useState('single')
   const [trains, setTrains] = useState([])
   const [selectedSeatIds, setSelectedSeatIds] = useState([])
+  const [coveringSubscription, setCoveringSubscription] = useState(null)
   const [searching, setSearching] = useState(false)
   const [selectedTrain, setSelectedTrain] = useState(null)
   const [quote, setQuote] = useState(null)
   const [quoting, setQuoting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
+
+  // Verific daca user are abonament activ care acopera ruta selectata.
+  // Daca DA, biletul va fi GRATUIT (price=0) automat la cumparare —
+  // backend-ul detecteaza acest lucru in /tickets/buy via subscription_business.
+  useEffect(() => {
+    if (!fromStation?.station_id || !toStation?.station_id || !travelDate) {
+      setCoveringSubscription(null)
+      return
+    }
+    let cancelled = false
+    getMySubscriptions()
+      .then(rows => {
+        if (cancelled) return
+        const match = (rows || []).find(s =>
+          s.status === 'active' &&
+          s.subscription_scope === 'route' &&
+          s.valid_from <= travelDate && s.valid_until >= travelDate &&
+          (
+            (s.from_station_id === fromStation.station_id && s.to_station_id === toStation.station_id) ||
+            (s.from_station_id === toStation.station_id && s.to_station_id === fromStation.station_id)
+          )
+        )
+        setCoveringSubscription(match || null)
+      })
+      .catch(() => setCoveringSubscription(null))
+    return () => { cancelled = true }
+  }, [fromStation, toStation, travelDate])
 
   // 1. Cand avem plecare + sosire, cautam trenuri
   useEffect(() => {
@@ -244,7 +272,22 @@ export default function BuyTicket() {
         )}
 
         <div className="flex gap-3 pt-2">
-          {selectedTrain && formData.travel_date && from?.station_id && to?.station_id && (
+          {coveringSubscription && (
+          <div className="mb-4 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 border-2 border-emerald-400 dark:border-emerald-600 text-emerald-900 dark:text-emerald-100">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">🎫</span>
+              <div className="flex-1">
+                <div className="font-bold mb-1">Acoperit de abonament</div>
+                <div className="text-sm">
+                  Aveti abonament {coveringSubscription.subscription_type === 'monthly' ? 'lunar' : 'anual'} activ pe aceasta ruta (valabil pana pe {coveringSubscription.valid_until}).
+                  <strong> Biletul va fi GRATUIT (0 RON)</strong> si va fi inregistrat ca utilizare a abonamentului.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedTrain && formData.travel_date && from?.station_id && to?.station_id && (
           <div className="mt-6 p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
             <h3 className="text-lg font-bold mb-3 text-slate-900 dark:text-slate-100">
               Alege locurile (optional)

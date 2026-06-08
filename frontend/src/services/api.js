@@ -710,3 +710,47 @@ export const rescheduleTicket = (ticketId, { new_train_id, new_travel_date, new_
     body: JSON.stringify({ new_train_id, new_travel_date, new_seat_ids }),
   })
 
+// =============================================================================
+// Subscriptions (CFR route-scoped, monthly/annual)
+// =============================================================================
+
+/**
+ * Preview pret abonament cu reducere conditionata (student verificat pe ruta
+ * home <-> universitate).
+ * Returneaza: { from_station_id, to_station_id, subscription_type, duration_days,
+ *               distance_km, base_price, discount_amount, discount_pct,
+ *               final_price, is_student_route, discount_reason }
+ */
+export const getSubscriptionQuote = ({ from_station_id, to_station_id, subscription_type }) =>
+  apiCall('/subscriptions/quote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from_station_id, to_station_id, subscription_type }),
+  })
+
+/**
+ * Cumparare abonament. Verifica anti-overlap pe ruta (un singur abonament
+ * activ per (user, from, to) in orice directie).
+ * valid_from optional (default azi).
+ */
+export const buySubscription = ({ from_station_id, to_station_id, subscription_type, valid_from }) =>
+  apiCall('/subscriptions/buy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from_station_id, to_station_id, subscription_type, valid_from }),
+  })
+
+/**
+ * Lista abonamentelor mele, sortate active > expired > cancelled.
+ * Trimite implicit notificari pentru abonamentele care expira in <=7 zile.
+ */
+export const getMySubscriptions = () => apiCall('/subscriptions/my')
+
+/**
+ * Anulare abonament cu refund pro-rata CFR:
+ *   - inainte de valid_from         -> 100% refund
+ *   - in primele 50% din durata     -> pe zile neutilizate * 0.5
+ *   - dupa 50% din durata           -> 0%
+ */
+export const cancelSubscription = (subscriptionId) =>
+  apiCall(`/subscriptions/${subscriptionId}/cancel`, { method: 'POST' })

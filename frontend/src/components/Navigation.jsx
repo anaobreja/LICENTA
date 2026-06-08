@@ -70,6 +70,7 @@ function Navigation({ user, onLogout }) {
               <Link to="/credentials" className="hover:text-blue-200">Credentiale</Link>
               <Link to="/present" className="hover:text-blue-200">Card Digital</Link>
               <Link to="/tickets" className="hover:text-blue-200">Bilete</Link>
+              <Link to="/subscriptions" className="hover:text-blue-200">Abonamente</Link>
               <Link to="/map" className="hover:text-blue-200">Hartă</Link>
               <Link to="/travel-history" className="hover:text-blue-200">Istoric calatorii</Link>
             </>
