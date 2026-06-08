@@ -26,10 +26,17 @@ REPO_ROOT = BACKEND_PATH.parent
 SCHEMA_PATH = REPO_ROOT / "database" / "schema.sql"
 SEED_PATH = REPO_ROOT / "database" / "seed_demo.sql"
 
-# Tabele care raman dupa cleanup (seed-ul demo)
+# Tabele care raman dupa cleanup (seed-ul demo + datele de transport).
+# Includem TOATE tabelele de transport pentru ca:
+#   1) test_map.py si test_personal_route.py au nevoie de stations/trains/routes
+#      ca date de referinta, inserate o data per sesiune (fie din seed,
+#      fie din fixture-ul _seed_railway_minimal).
+#   2) cleanup-ul intre teste sterge doar datele tranzitorii (bilete, validari,
+#      tokens, audit logs), nu si infrastructura de transport.
 KEEP_TABLES = {
     "universities", "users", "issuers", "stations", "trains", "routes",
     "railway_operators", "university_students",
+    "route_stops", "tariff_brackets",
     # cardul + credentialul demo seedate pentru user.demo:
     "digital_cards", "user_credentials",
 }
@@ -37,6 +44,45 @@ KEEP_TABLES = {
 def _psycopg_dsn(url: str) -> str:
     """Converteste URL SQLAlchemy in DSN psycopg pur (fara '+psycopg')."""
     return url.replace("postgresql+psycopg://", "postgresql://")
+
+def _preflight_check_postgres():
+    """
+    Verifica daca PostgreSQL e accesibil INAINTE de a porni testele.
+
+    Fara aceasta verificare, daca Docker nu e pornit, psycopg.connect() ar
+    astepta ~75s (timeout TCP default pe Windows) la primul test, apoi ar
+    crapa cu un traceback lung si confuz. Aici verificam in <3 secunde si
+    afisam un mesaj cu instructiuni exacte.
+    """
+    admin_dsn = _admin_dsn()
+    try:
+        with psycopg.connect(admin_dsn, connect_timeout=3) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+    except Exception as e:
+        msg = (
+            "\n"
+            + "=" * 70 + "\n"
+            + "  EROARE: Nu pot conecta la PostgreSQL.\n"
+            + "=" * 70 + "\n"
+            + f"  URL incercat: {admin_dsn}\n"
+            + f"  Motiv:        {type(e).__name__}: {e}\n"
+            + "\n"
+            + "  PostgreSQL nu este pornit. Pasii pentru a-l porni:\n"
+            + "\n"
+            + "    1. Porneste Docker Desktop (asteapta sa devina stabil).\n"
+            + "    2. In terminal, din D:\\LICENTA:\n"
+            + "         docker-compose up -d postgres\n"
+            + "    3. Asteapta ~5 secunde. Verifica cu:\n"
+            + "         docker ps --filter name=railway_db\n"
+            + "       Trebuie sa vezi STATUS 'Up X seconds (healthy)'.\n"
+            + "    4. Re-ruleaza pytest.\n"
+            + "\n"
+            + "  Pentru a folosi alta DB de test, seteaza TEST_DATABASE_URL\n"
+            + "  in environment inainte de pytest.\n"
+            + "=" * 70 + "\n"
+        )
+        pytest.exit(msg, returncode=2)
 
 def _get_test_db_name() -> str:
     return TEST_DB_URL.rsplit("/", 1)[1]
@@ -47,6 +93,7 @@ def _admin_dsn() -> str:
 
 def _recreate_test_database():
     """Recreeaza DB-ul de test si incarca schema + seed prin psycopg (multi-statement)."""
+    _preflight_check_postgres()
     db_name = _get_test_db_name()
 
     # 1. DROP + CREATE prin conexiune admin
