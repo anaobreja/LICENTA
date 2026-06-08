@@ -259,21 +259,23 @@ def update_me(
     if payload.phone is not None:
         updates["phone"] = payload.phone
     if payload.date_of_birth is not None:
-        # Parsam la date object Python ca sa evitam ambiguitati de bind type.
-        # Acceptam atat 'YYYY-MM-DD' cat si 'YYYY-MM-DDTHH:MM:SS' (timestamp ISO).
+        # Acceptam YYYY-MM-DD si YYYY-MM-DDTHH:MM:SS. Normalizam la YYYY-MM-DD string
+        # (evita bug-ul psycopg cu bind type cache pe date object).
         from datetime import date, datetime
         raw = payload.date_of_birth.strip()
         try:
             if "T" in raw:
-                parsed = datetime.fromisoformat(raw).date()
+                parsed_str = datetime.fromisoformat(raw).date().isoformat()
             else:
-                parsed = date.fromisoformat(raw)
+                # Validez formatul prin parsing dar pastrez string
+                date.fromisoformat(raw)
+                parsed_str = raw
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"date_of_birth format invalid: {raw!r}. Use YYYY-MM-DD.",
             )
-        updates["date_of_birth"] = parsed
+        updates["date_of_birth"] = parsed_str
     if payload.home_station_id is not None:
         # 0 sau null = sterge selectia
         if payload.home_station_id == 0:

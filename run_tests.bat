@@ -56,11 +56,11 @@ echo.
 echo Utilizare: run_tests.bat [mod]
 echo.
 echo Moduri disponibile:
-echo   (fara argument)    - ruleaza TOATE testele backend + frontend
-echo   unit               - doar tests/unit/ (rapide, fara DB)
+echo   (fara argument)    - ruleaza TOATE testele + coverage (cifra in terminal)
+echo   unit               - doar tests/unit/ (rapide, fara DB, fara coverage)
 echo   integration        - doar tests/integration/ (cu DB)
 echo   e2e                - doar tests/e2e/ (flux complet)
-echo   coverage           - backend cu raport HTML (deschide htmlcov/index.html)
+echo   coverage           - backend + coverage + raport HTML auto-deschis
 echo   frontend           - doar npm test (19 teste Ed25519 verify offline)
 echo   fast               - unit + frontend (rapid, ~5s, fara Docker)
 echo.
@@ -244,16 +244,29 @@ if errorlevel 1 (
 pushd backend
 if defined COVERAGE (
     echo   [Coverage mode] Rulez cu --cov=app --cov-report=html --cov-report=term
-    pytest %TEST_PATH% --cov=app --cov-report=html --cov-report=term-missing --tb=short
+    pytest %TEST_PATH% --cov=app --cov-report=html --cov-report=term-missing --tb=short > _cov_run.log 2>&1
     set BACKEND_EXIT=!errorlevel!
+    type _cov_run.log
+    REM Extrag cifra TOTAL coverage din output (ultima linie cu "TOTAL")
+    for /f "tokens=4" %%a in ('findstr /R /C:"^TOTAL" _cov_run.log') do set COVERAGE_PCT=%%a
+    del _cov_run.log 2>nul
     if exist htmlcov\index.html (
         echo.
         echo   Raport HTML generat: backend\htmlcov\index.html
         start "" htmlcov\index.html
     )
 ) else (
-    pytest %TEST_PATH% -v --tb=short
-    set BACKEND_EXIT=!errorlevel!
+    REM Default mod ALL/unit/integration/e2e: adaug coverage discreet (term only, nu HTML)
+    if /i "%MODE%"=="all" (
+        pytest %TEST_PATH% -v --tb=short --cov=app --cov-report=term > _cov_run.log 2>&1
+        set BACKEND_EXIT=!errorlevel!
+        type _cov_run.log
+        for /f "tokens=4" %%a in ('findstr /R /C:"^TOTAL" _cov_run.log') do set COVERAGE_PCT=%%a
+        del _cov_run.log 2>nul
+    ) else (
+        pytest %TEST_PATH% -v --tb=short
+        set BACKEND_EXIT=!errorlevel!
+    )
 )
 popd
 
@@ -303,13 +316,16 @@ echo ===========================================================================
 echo   REZUMAT FINAL - mod %MODE_LABEL%
 echo ============================================================================
 if !BACKEND_EXIT! EQU 0 (
-    if defined COVERAGE (
-        echo   Backend:   PASSED  ^(cu raport HTML coverage^)
+    if defined COVERAGE_PCT (
+        echo   Backend:   PASSED  ^(coverage global: !COVERAGE_PCT!^)
     ) else (
-        echo   Backend:   PASSED  ^(270 teste, 80%% coverage global^)
+        echo   Backend:   PASSED
     )
 ) else (
     echo   Backend:   FAILED  ^(exit code !BACKEND_EXIT!^)
+)
+if defined COVERAGE (
+    echo   Raport HTML: backend\htmlcov\index.html ^(deschis automat^)
 )
 
 if !BACKEND_EXIT! NEQ 0 (
