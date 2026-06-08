@@ -39,6 +39,9 @@ KEEP_TABLES = {
     "route_stops", "tariff_brackets",
     # cardul + credentialul demo seedate pentru user.demo:
     "digital_cards", "user_credentials",
+    # Infrastructura statica de vagoane si locuri (generata o data per tren,
+    # in fixture-ele de test — nu se modifica intre teste).
+    "train_cars", "seats",
 }
 
 def _psycopg_dsn(url: str) -> str:
@@ -133,6 +136,102 @@ def _truncate_transactional_tables(engine):
 def _setup_test_database():
     """Creeaza DB de test o singura data per sesiune."""
     _recreate_test_database()
+    yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _seed_default_train_catalog(_setup_test_database):
+    """
+    Garanteaza ca exista cel putin un tren cu ruta + tariff_brackets in DB-ul
+    de test, ca testele care apeleaza GET /tickets/catalog sa primeasca date.
+
+    Schema fresh creeaza tabelele goale, iar seed_demo.sql adauga doar useri si
+    universitati (NU trenuri — astea vin in productie din import_cfr.py).
+    Aici facem un setup minim, idempotent (ON CONFLICT), pentru ca testele
+    preexistente (test_tickets, test_personal_route, etc.) sa aiba pe ce lucra.
+    """
+    from app.core.database import engine as eng
+
+    with eng.begin() as conn:
+        # Operator
+        op_id = conn.execute(text("""
+            INSERT INTO railway_operators (code, name)
+            VALUES ('CFR_DEFAULT', 'CFR Calatori (default test)')
+            ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+            RETURNING operator_id
+        """)).scalar()
+
+        # Statii — Iasi si Bucuresti Nord Gr.A (asteptate de test_tickets.py)
+        s_iasi = conn.execute(text("""
+            INSERT INTO stations (code, name, city, country)
+            VALUES ('IS_DEF', 'Iaşi', 'Iaşi', 'Romania')
+            ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+            RETURNING station_id
+        """)).scalar()
+        s_buc = conn.execute(text("""
+            INSERT INTO stations (code, name, city, country)
+            VALUES ('BN_DEF', 'Bucureşti Nord Gr.A', 'Bucureşti', 'Romania')
+            ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+            RETURNING station_id
+        """)).scalar()
+
+        # Ruta — Iasi -> Bucuresti Nord
+        route_id = conn.execute(text("""
+            INSERT INTO routes (route_name, route_code, operator_id,
+                                origin_station_id, destination_station_id,
+                                total_distance_km)
+            VALUES ('Iasi - Bucuresti Nord', 'IS-BN-DEF', :op, :s1, :s2, 406)
+            ON CONFLICT (route_code) DO UPDATE SET route_name = EXCLUDED.route_name
+            RETURNING route_id
+        """), {"op": op_id, "s1": s_iasi, "s2": s_buc}).scalar()
+
+        # Trenul IR 1582
+        train_id = conn.execute(text("""
+            INSERT INTO trains (operator_id, route_id, train_number, train_type,
+                                capacity_seats, is_active)
+            VALUES (:op, :rt, 'IR1582-DEF', 'interregio', 280, TRUE)
+            ON CONFLICT (operator_id, train_number) DO UPDATE
+                SET train_type = EXCLUDED.train_type, is_active = TRUE
+            RETURNING train_id
+        """), {"op": op_id, "rt": route_id}).scalar()
+
+        # Route stops cu departure/arrival times pentru test de anti-overlap
+        conn.execute(text("""
+            INSERT INTO route_stops (route_id, station_id, stop_order,
+                                     arrival_time, departure_time,
+                                     distance_from_origin_km)
+            VALUES
+                (:rt, :s1, 1, NULL,            '08:00'::TIME, 0),
+                (:rt, :s2, 2, '14:30'::TIME,   NULL,          406)
+            ON CONFLICT (route_id, stop_order) DO UPDATE SET
+                arrival_time = EXCLUDED.arrival_time,
+                departure_time = EXCLUDED.departure_time
+        """), {"rt": route_id, "s1": s_iasi, "s2": s_buc})
+
+        # Genereaza vagoane si locuri
+        conn.execute(text("SELECT generate_train_layout(:t)"), {"t": train_id})
+
+        # Tariff brackets — schema reala: train_category (R/IR/IC), train_class (1/2),
+        # km_from/km_to (intervale de distanta), price_ron.
+        # UNIQUE pe (train_category, train_class, km_from, km_to) -> idempotent.
+        conn.execute(text("""
+            INSERT INTO tariff_brackets (train_category, train_class, km_from, km_to, price_ron)
+            VALUES
+                ('R',   2,    0,   50, 15.00),
+                ('R',   2,   50,  100, 22.00),
+                ('R',   2,  100,  200, 35.00),
+                ('R',   2,  200,  500, 50.00),
+                ('IR',  2,    0,   50, 25.00),
+                ('IR',  2,   50,  100, 40.00),
+                ('IR',  2,  100,  200, 65.00),
+                ('IR',  2,  200,  500, 95.00),
+                ('IC',  2,    0,   50, 35.00),
+                ('IC',  2,   50,  100, 55.00),
+                ('IC',  2,  100,  200, 85.00),
+                ('IC',  2,  200,  500, 120.00)
+            ON CONFLICT (train_category, train_class, km_from, km_to) DO NOTHING
+        """))
+
     yield
 
 # ===== 4. App + client =======================================================

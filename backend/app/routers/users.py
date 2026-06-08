@@ -17,6 +17,11 @@ from app.core.roles import (
     has_role,
     normalize_role,
 )
+from app.core.identity_status import (
+    check_frozen_field_changes,
+    get_verification_status,
+    FROZEN_FIELDS_WHEN_VERIFIED,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -200,6 +205,44 @@ def update_me(
 ):
     user_id = _current_user_id(authorization, db)
 
+    # Securitate: campurile FROZEN nu pot fi modificate cat timp userul
+    # are credential identity_verified activ (datele validate sunt protejate
+    # pana la sfarsitul anului universitar curent).
+    payload_dict = payload.model_dump(exclude_unset=True)
+    if payload_dict:
+        # Aducem starea curenta a userului pentru comparare cu payload
+        current_row = db.execute(
+            text("""
+                SELECT cnp, first_name, last_name, birth_date, home_station_id
+                FROM users WHERE user_id = :uid
+            """),
+            {"uid": user_id},
+        ).mappings().first()
+
+        if current_row:
+            frozen_changes = check_frozen_field_changes(
+                db, user_id, current_row, payload_dict
+            )
+            if frozen_changes:
+                status_info = get_verification_status(db, user_id)
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "frozen_field_modification_blocked",
+                        "message": (
+                            f"Nu puteti modifica campurile {frozen_changes} "
+                            f"cat timp identitatea este verificata. "
+                            f"Verificarea expira pe {status_info['expires_at']} "
+                            f"(sfarsitul anului universitar curent). "
+                            f"Dupa expirare puteti modifica datele si va trebui "
+                            f"sa refaceti procesul de verificare."
+                        ),
+                        "frozen_fields_attempted": frozen_changes,
+                        "expires_at": status_info["expires_at"],
+                        "days_until_expiry": status_info["days_until_expiry"],
+                    },
+                )
+
     row = db.execute(
         text("SELECT user_id, is_active FROM users WHERE user_id = :user_id"),
         {"user_id": user_id},
@@ -379,3 +422,29 @@ def delete_me(authorization: str | None = Header(default=None), db: Session = De
     db.commit()
 
     return {"message": "Account deactivated", "user_id": user_id}
+
+
+# ============================================================================
+# === VERIFICATION STATUS ===
+# ----------------------------------------------------------------------------
+# Endpoint dedicat pentru frontend ca sa stie ce campuri sunt frozen si pana
+# cand. Folosit in Profile.jsx pentru a afisa banner + a dezactiva inputurile.
+# ============================================================================
+
+
+@router.get("/users/me/verification-status")
+def my_verification_status(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Returneaza statusul de verificare al utilizatorului curent:
+      - is_verified: True daca exista credential identity_verified activ
+      - verified_at, expires_at: datele cheie
+      - days_until_expiry: cate zile mai sunt pana la expirare
+      - frozen_fields: lista campurilor protejate (cand verified)
+      - academic_year: e.g. "2025-2026"
+      - message: text pentru afisare in UI
+    """
+    user_id = _current_user_id(authorization, db)
+    return get_verification_status(db, user_id)

@@ -506,6 +506,17 @@ export const verifyOfflineToken = async (token) => {
 }
 
 // User
+/**
+ * Returneaza statusul de verificare al utilizatorului:
+ *   { is_verified, verified_at, expires_at, days_until_expiry,
+ *     frozen_fields, academic_year, message }
+ *
+ * Folosit in Profile.jsx pentru a afisa banner si a dezactiva
+ * campurile FROZEN.
+ */
+export const getVerificationStatus = () =>
+  apiCall('/users/me/verification-status')
+
 export const getUserProfile = () =>
   apiCall('/users/me')
 
@@ -648,3 +659,54 @@ export const getMapOperators = () => apiCall('/map/operators')
 
 export const simulateTrainPosition = (trainId) =>
   apiCall(`/map/train-simulate/${trainId}`)
+
+
+// =============================================================================
+// Seats & Ticket Lifecycle (Faza 5)
+// =============================================================================
+
+/**
+ * Layout-ul complet al unui tren + status fiecarui loc pentru o data calatorie.
+ * Status: 'free' | 'sold' | 'held' | 'mine_held' | 'mine_sold'
+ */
+export const getTrainSeats = (trainId, travelDate) =>
+  apiCall(`/trains/${trainId}/seats?travel_date=${encodeURIComponent(travelDate)}`)
+
+/**
+ * Tine un loc rezervat pentru 5 minute. Idempotent (refresh la timer).
+ */
+export const holdSeat = ({ train_id, seat_id, travel_date }) =>
+  apiCall('/seats/hold', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ train_id, seat_id, travel_date }),
+  })
+
+/**
+ * Elibereaza un hold al userului curent. Idempotent.
+ */
+export const releaseSeat = ({ seat_id, travel_date }) =>
+  apiCall('/seats/release', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ seat_id, travel_date }),
+  })
+
+/**
+ * Anuleaza un bilet activ. Returneaza refund_amount + refund_tier
+ * ('full' | 'half' | 'none') conform regulilor CFR.
+ */
+export const cancelTicket = (ticketId) =>
+  apiCall(`/tickets/${ticketId}/cancel`, { method: 'POST' })
+
+/**
+ * Reprogrameaza un bilet pe alt tren / alta data (acelasi traseu).
+ * Diferenta de pret nu se restituie.
+ */
+export const rescheduleTicket = (ticketId, { new_train_id, new_travel_date, new_seat_ids }) =>
+  apiCall(`/tickets/${ticketId}/reschedule`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ new_train_id, new_travel_date, new_seat_ids }),
+  })
+

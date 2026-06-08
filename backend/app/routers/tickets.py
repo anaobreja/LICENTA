@@ -11,6 +11,13 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.core.roles import ROLE_PASSENGER, ROLE_TRAIN_VERIFIER, has_role, normalize_role
 from app.core.security import decode_token
+from app.services.ticket_business import (
+    check_overlap,
+    compute_refund,
+    confirm_seats_for_ticket,
+    get_train_departure_datetime,
+    release_ticket_seats,
+)
 
 router = APIRouter(tags=["tickets"])
 # DB session dependency
@@ -58,6 +65,9 @@ class BuyTicketRequest(BaseModel):
     arrival_station_id: int = Field(..., ge=1)
     travel_date: str  # YYYY-MM-DD
     ticket_type: str = Field(default="single")  # single | return
+    # Lista de seat_id-uri rezervate prin /seats/hold inainte de cumparare.
+    # Daca e None sau goala, cumparam fara loc specific (legacy).
+    seat_ids: Optional[list[int]] = None
 
 class ValidateTicketRequest(BaseModel):
     token: str
@@ -528,6 +538,10 @@ def buy_ticket(
     if payload.departure_station_id == payload.arrival_station_id:
         raise HTTPException(status_code=400, detail="Statia de plecare nu poate fi aceeasi cu sosirea")
 
+    # Anti-overlap: nu permitem 2 bilete active in intervale orare suprapuse
+    # pentru acelasi user. Raise 409 cu detalii despre conflict.
+    check_overlap(db, user["user_id"], payload.train_id, travel_date)
+
     # Validare ca trenul + rutele exista
     train = db.execute(
         text("SELECT train_id, route_id FROM trains WHERE train_id = :tid AND is_active = TRUE"),
@@ -618,6 +632,18 @@ def buy_ticket(
                 "expires_at": valid_until,
             },
         ).mappings().first()
+
+        # 4. Confirma locurile rezervate prin /seats/hold (daca exista).
+        # Daca hold-ul a expirat sau locul a fost vandut intre timp, raise 409
+        # iar tranzactia se anuleaza (db.rollback in exception handler).
+        if payload.seat_ids:
+            confirm_seats_for_ticket(
+                db,
+                ticket_id=ticket["ticket_id"],
+                user_id=user["user_id"],
+                seat_ids=payload.seat_ids,
+                travel_date=travel_date,
+            )
 
         db.commit()
 
@@ -879,3 +905,315 @@ def validations_history(
         {**dict(r), "validation_time": str(r["validation_time"])}
         for r in rows
     ]
+
+
+# ============================================================================
+# === LIFECYCLE: CANCEL + RESCHEDULE ===
+# ----------------------------------------------------------------------------
+# Endpoint-uri pentru anulare bilet (cu refund pe trepte CFR) si reprogramare
+# pe acelasi traseu, alt tren / alta data.
+# ============================================================================
+
+
+class RescheduleRequest(BaseModel):
+    new_train_id: int = Field(..., ge=1)
+    new_travel_date: str  # YYYY-MM-DD
+    new_seat_ids: Optional[list[int]] = None
+
+
+@router.post("/tickets/{ticket_id}/cancel")
+def cancel_ticket(
+    ticket_id: int,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Anuleaza un bilet activ. Calculeaza refund conform CFR Calatori:
+      - >24h inainte de plecare =>  100% refund
+      -  1m - 24h inainte       =>   50% refund
+      -  0  sau dupa plecare    =>    0% refund
+    Locurile sunt eliberate INSTANT si redevin disponibile pentru alti useri.
+    """
+    actor = _extract_user_from_token(authorization, db)
+    user_id = actor["user_id"]
+
+    row = db.execute(
+        text("""
+            SELECT t.ticket_id, t.user_id, t.train_id, t.travel_date,
+                   t.price, t.ticket_status, tr.train_number
+            FROM tickets t
+            JOIN trains tr ON tr.train_id = t.train_id
+            WHERE t.ticket_id = :tid
+        """),
+        {"tid": ticket_id},
+    ).mappings().first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Bilet inexistent")
+    if row["user_id"] != user_id and not has_role(actor.get("role"), "admin"):
+        raise HTTPException(status_code=403, detail="Acest bilet nu va apartine")
+    if row["ticket_status"] != "active":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "invalid_status",
+                "message": f"Biletul are statusul '{row['ticket_status']}' "
+                           f"si nu mai poate fi anulat.",
+            },
+        )
+
+    departure_dt = get_train_departure_datetime(
+        db, row["train_id"], row["travel_date"]
+    )
+    if departure_dt is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Trenul nu are ora de plecare, contactati suportul.",
+        )
+
+    refund_amount, tier = compute_refund(
+        price_paid=float(row["price"] or 0),
+        departure_dt=departure_dt,
+    )
+
+    now = datetime.now(timezone.utc)
+
+    # 1. Elibereaza locurile (instant disponibile)
+    seats_released = release_ticket_seats(db, ticket_id)
+
+    # 2. Marcheaza biletul ca anulat
+    db.execute(
+        text("""
+            UPDATE tickets
+            SET ticket_status = 'cancelled',
+                cancelled_at = :now,
+                cancel_refund_amount = :ref
+            WHERE ticket_id = :tid
+        """),
+        {"now": now, "ref": refund_amount, "tid": ticket_id},
+    )
+
+    # 3. Invalideaza entitlement + qr_token
+    db.execute(
+        text("""
+            UPDATE travel_entitlements SET status = 'revoked'
+            WHERE source_type = 'ticket' AND ticket_id = :tid AND status = 'active'
+        """),
+        {"tid": ticket_id},
+    )
+    db.execute(
+        text("""
+            UPDATE qr_tokens SET status = 'revoked'
+            WHERE entitlement_id IN (
+                SELECT entitlement_id FROM travel_entitlements
+                WHERE source_type = 'ticket' AND ticket_id = :tid
+            )
+        """),
+        {"tid": ticket_id},
+    )
+
+    # 4. Notificare
+    tier_msg = {
+        "full": "Veti primi inapoi 100% din suma platita.",
+        "half": "Conform regulamentului CFR, refund-ul este 50% din suma "
+                "(anulare in mai putin de 24h pana la plecare).",
+        "none": "Nu se acorda refund pentru anulare dupa plecarea trenului.",
+    }[tier]
+
+    db.execute(
+        text("""
+            INSERT INTO notifications (user_id, category, title, message, is_read, created_at)
+            VALUES (:uid, 'ticket', :title, :msg, FALSE, NOW())
+        """),
+        {
+            "uid": user_id,
+            "title": "Bilet anulat",
+            "msg": f"Biletul pentru trenul {row['train_number']} din "
+                   f"{row['travel_date'].isoformat()} a fost anulat. "
+                   f"Refund: {refund_amount:.2f} RON. {tier_msg}",
+        },
+    )
+
+    db.commit()
+
+    return {
+        "ticket_id": ticket_id,
+        "status": "cancelled",
+        "refund_amount": refund_amount,
+        "refund_tier": tier,
+        "seats_released": seats_released,
+        "message": tier_msg,
+    }
+
+
+@router.post("/tickets/{ticket_id}/reschedule")
+def reschedule_ticket(
+    ticket_id: int,
+    body: RescheduleRequest,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Reprogrameaza biletul pe alt tren / alta data, PASTRAND traseul
+    (acelasi origin_station si destination_station).
+
+    Reguli CFR:
+      - Biletul vechi trebuie sa fie active si trenul sa nu fi plecat inca.
+      - Noul tren trebuie sa fie pe acelasi traseu (same from/to stations).
+      - Diferenta de pret nu se restituie.
+      - Locurile vechi sunt eliberate instant.
+    """
+    actor = _extract_user_from_token(authorization, db)
+    user_id = actor["user_id"]
+
+    old = db.execute(
+        text("""
+            SELECT t.ticket_id, t.user_id, t.train_id, t.travel_date,
+                   t.price, t.discount_applied, t.ticket_type,
+                   t.departure_station_id, t.arrival_station_id,
+                   t.ticket_status, tr.train_number
+            FROM tickets t
+            JOIN trains tr ON tr.train_id = t.train_id
+            WHERE t.ticket_id = :tid
+        """),
+        {"tid": ticket_id},
+    ).mappings().first()
+
+    if not old:
+        raise HTTPException(status_code=404, detail="Bilet inexistent")
+    if old["user_id"] != user_id and not has_role(actor.get("role"), "admin"):
+        raise HTTPException(status_code=403, detail="Acest bilet nu va apartine")
+    if old["ticket_status"] != "active":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Biletul are statusul '{old['ticket_status']}' si nu poate fi reprogramat.",
+        )
+
+    old_dep = get_train_departure_datetime(db, old["train_id"], old["travel_date"])
+    if old_dep is None or old_dep < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=409,
+            detail="Trenul original a plecat deja sau ora plecarii e necunoscuta.",
+        )
+
+    # Validare data noua
+    try:
+        new_date = datetime.strptime(body.new_travel_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Data noua invalida (YYYY-MM-DD)")
+    if new_date < datetime.now(timezone.utc).date():
+        raise HTTPException(status_code=400, detail="Noua data este in trecut")
+
+    # Verifica noul tren si traseul
+    new_train = db.execute(
+        text("""
+            SELECT t.train_id, t.train_number, t.route_id, t.is_active,
+                   r.origin_station_id, r.destination_station_id
+            FROM trains t
+            LEFT JOIN routes r ON r.route_id = t.route_id
+            WHERE t.train_id = :tid
+        """),
+        {"tid": body.new_train_id},
+    ).mappings().first()
+    if not new_train:
+        raise HTTPException(status_code=404, detail="Tren nou inexistent")
+    if not new_train["is_active"]:
+        raise HTTPException(status_code=409, detail="Trenul nou nu este activ")
+
+    if (new_train["origin_station_id"] != old["departure_station_id"] or
+            new_train["destination_station_id"] != old["arrival_station_id"]):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "different_route",
+                "message": "Noul tren nu e pe acelasi traseu. Reprogramarea "
+                           "este permisa doar intre trenuri cu aceleasi statii "
+                           "de plecare si sosire. Anulati biletul si cumparati altul.",
+            },
+        )
+
+    # 1. Elibereaza locurile vechi
+    release_ticket_seats(db, ticket_id)
+
+    # 2. Marcheaza biletul vechi ca 'rescheduled'
+    db.execute(
+        text("UPDATE tickets SET ticket_status='rescheduled' WHERE ticket_id=:tid"),
+        {"tid": ticket_id},
+    )
+
+    # 3. Anti-overlap pe noul interval (acum vechiul nu mai e 'active')
+    check_overlap(db, user_id, body.new_train_id, new_date)
+
+    # 4. Cloneaza biletul cu noile date
+    new_ticket = db.execute(
+        text("""
+            INSERT INTO tickets (
+                user_id, train_id, departure_station_id, arrival_station_id,
+                travel_date, ticket_type, ticket_status,
+                price, discount_applied,
+                rescheduled_from_ticket_id
+            ) VALUES (
+                :uid, :tid, :dep, :arr,
+                :td, :type, 'active',
+                :price, :disc, :from_id
+            )
+            RETURNING ticket_id
+        """),
+        {
+            "uid": user_id, "tid": body.new_train_id,
+            "dep": old["departure_station_id"], "arr": old["arrival_station_id"],
+            "td": new_date, "type": old["ticket_type"],
+            "price": old["price"], "disc": old["discount_applied"],
+            "from_id": ticket_id,
+        },
+    ).mappings().first()
+    new_ticket_id = new_ticket["ticket_id"]
+
+    # 5. Leaga si in directia inversa (vechi -> nou)
+    db.execute(
+        text("UPDATE tickets SET rescheduled_to_ticket_id=:new WHERE ticket_id=:old"),
+        {"new": new_ticket_id, "old": ticket_id},
+    )
+
+    # 6. Confirma locurile noi (daca s-au transmis)
+    seats_count = 0
+    if body.new_seat_ids:
+        seats_count = confirm_seats_for_ticket(
+            db, ticket_id=new_ticket_id, user_id=user_id,
+            seat_ids=body.new_seat_ids, travel_date=new_date,
+        )
+
+    # 7. Mut entitlement-ul pe biletul nou (re-issued)
+    db.execute(
+        text("""
+            UPDATE travel_entitlements
+            SET ticket_id = :new
+            WHERE source_type = 'ticket' AND ticket_id = :old AND status = 'active'
+        """),
+        {"new": new_ticket_id, "old": ticket_id},
+    )
+
+    # 8. Notificare
+    db.execute(
+        text("""
+            INSERT INTO notifications (user_id, category, title, message, is_read, created_at)
+            VALUES (:uid, 'ticket', :title, :msg, FALSE, NOW())
+        """),
+        {
+            "uid": user_id,
+            "title": "Bilet reprogramat",
+            "msg": f"Biletul a fost reprogramat pe trenul "
+                   f"{new_train['train_number']} din {new_date.isoformat()}.",
+        },
+    )
+
+    db.commit()
+
+    return {
+        "old_ticket_id": ticket_id,
+        "new_ticket_id": new_ticket_id,
+        "new_train_id": body.new_train_id,
+        "new_travel_date": new_date.isoformat(),
+        "seats_assigned": seats_count,
+        "message": "Reprogramare reusita. Diferenta de pret nu se restituie conform CFR.",
+    }
