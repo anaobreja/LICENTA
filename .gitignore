@@ -15,6 +15,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
 *.so
 .Python
 build/
@@ -109,3 +110,9 @@ side_by_side.py
 strict.py
 verify_*.py
 prenume_diff.txt
+
+# Chei de semnare (NU committed niciodata)
+backend/keys/
+backend/keys/*.pem
+keys/
+keys/*.pem
