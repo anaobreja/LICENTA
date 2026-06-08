@@ -129,9 +129,11 @@ class TestTOTP:
 
     def test_get_totp_uri_contains_email_and_issuer(self):
         from app.core.security import get_totp_uri
+        from urllib.parse import unquote
         uri = get_totp_uri("JBSWY3DPEHPK3PXP", "user@test.ro", "Railway")
         assert "otpauth://totp/" in uri
-        assert "user@test.ro" in uri
+        # pyotp URL-encodeaza email-ul (@ -> %40), decodez inainte de verificare
+        assert "user@test.ro" in unquote(uri)
         assert "Railway" in uri
 
     def test_verify_totp_code_valid(self):

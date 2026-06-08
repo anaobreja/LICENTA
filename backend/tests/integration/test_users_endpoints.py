@@ -46,7 +46,7 @@ class TestChangePassword:
 
     def test_change_password_success(self, client):
         """Cu current_password corect + new_password valid -> 200."""
-        token = register_and_login(client, "passenger")
+        token = register_and_login(client, "pwd_success_unique")
         h = {"Authorization": f"Bearer {token}"}
 
         r = client.patch(
@@ -61,7 +61,7 @@ class TestChangePassword:
 
     def test_change_password_wrong_current_returns_401(self, client):
         """current_password gresit -> 401 (backend valideaza)."""
-        token = register_and_login(client, "passenger")
+        token = register_and_login(client, "pwd_wrong_unique")
         h = {"Authorization": f"Bearer {token}"}
 
         r = client.patch(
@@ -76,7 +76,7 @@ class TestChangePassword:
 
     def test_change_password_new_too_short_rejected(self, client):
         """Pydantic min_length pe new_password -> 422."""
-        token = register_and_login(client, "passenger")
+        token = register_and_login(client, "pwd_short_unique")
         h = {"Authorization": f"Bearer {token}"}
 
         r = client.patch(
@@ -108,7 +108,7 @@ class TestExportMyData:
         token = register_and_login(client, "passenger")
         h = {"Authorization": f"Bearer {token}"}
 
-        r = client.post("/users/me/export", headers=h)
+        r = client.get("/users/me/export", headers=h)
         assert r.status_code == 200, r.text
         body = r.json()
         assert isinstance(body, dict)
@@ -116,7 +116,7 @@ class TestExportMyData:
         assert "user" in body or "user_id" in body
 
     def test_export_requires_auth(self, client):
-        r = client.post("/users/me/export")
+        r = client.get("/users/me/export")
         assert r.status_code in (401, 403, 422)
 
 
@@ -131,7 +131,15 @@ class TestDeleteMyAccount:
         h = {"Authorization": f"Bearer {token}"}
         user_id = _get_user_id(client, token)
 
-        r = client.delete("/users/me", headers=h)
+        # Endpoint real: POST /users/me/delete cu body
+        r = client.post(
+            "/users/me/delete",
+            json={
+                "password": DEFAULT_PASSWORD,
+                "confirmation": "DELETE_MY_ACCOUNT",
+            },
+            headers=h,
+        )
         assert r.status_code in (200, 204), r.text
 
         # Verific in DB: hard delete sau soft delete
@@ -158,7 +166,7 @@ class TestProfilePhotoUpload:
         h = {"Authorization": f"Bearer {token}"}
 
         files = {"file": ("photo.png", io.BytesIO(_png()), "image/png")}
-        r = client.patch("/users/me/profile-photo", files=files, headers=h)
+        r = client.put("/users/me/profile-photo", files=files, headers=h)
         assert r.status_code in (200, 201), r.text
 
     def test_upload_invalid_content_type_returns_400(self, client):
@@ -167,12 +175,12 @@ class TestProfilePhotoUpload:
         h = {"Authorization": f"Bearer {token}"}
 
         files = {"file": ("doc.txt", io.BytesIO(b"text content"), "text/plain")}
-        r = client.patch("/users/me/profile-photo", files=files, headers=h)
-        assert r.status_code in (400, 415, 422), r.text
+        r = client.put("/users/me/profile-photo", files=files, headers=h)
+        assert r.status_code in (400, 415, 422), r.text  # 422 = FastAPI form validation
 
     def test_upload_requires_auth(self, client):
         files = {"file": ("p.png", io.BytesIO(_png()), "image/png")}
-        r = client.patch("/users/me/profile-photo", files=files)
+        r = client.put("/users/me/profile-photo", files=files)
         assert r.status_code in (401, 403, 422)
 
     def test_upload_replaces_existing(self, client):
@@ -181,12 +189,12 @@ class TestProfilePhotoUpload:
         h = {"Authorization": f"Bearer {token}"}
 
         files1 = {"file": ("a.png", io.BytesIO(_png()), "image/png")}
-        r1 = client.patch("/users/me/profile-photo", files=files1, headers=h)
+        r1 = client.put("/users/me/profile-photo", files=files1, headers=h)
         assert r1.status_code in (200, 201)
 
         new_content = b"\x89PNG\r\n\x1a\n" + b"y" * 200
         files2 = {"file": ("b.png", io.BytesIO(new_content), "image/png")}
-        r2 = client.patch("/users/me/profile-photo", files=files2, headers=h)
+        r2 = client.put("/users/me/profile-photo", files=files2, headers=h)
         assert r2.status_code in (200, 201)
 
 

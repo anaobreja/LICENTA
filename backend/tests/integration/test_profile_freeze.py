@@ -136,14 +136,14 @@ class TestUnverifiedUserCanModifyEverything:
         token = register_and_login(client, "passenger")
         h = {"Authorization": f"Bearer {token}"}
 
-        r = client.patch("/users/me", json={"cnp": "1990123456789"}, headers=h)
+        r = client.put("/users/me", json={"cnp": "1990123456789"}, headers=h)
         assert r.status_code == 200, r.text
 
     def test_unverified_can_change_name(self, client):
         token = register_and_login(client, "passenger")
         h = {"Authorization": f"Bearer {token}"}
 
-        r = client.patch("/users/me", json={
+        r = client.put("/users/me", json={
             "first_name": "Ion",
             "last_name": "Popescu",
         }, headers=h)
@@ -153,7 +153,7 @@ class TestUnverifiedUserCanModifyEverything:
         token = register_and_login(client, "passenger")
         h = {"Authorization": f"Bearer {token}"}
         # Formatul asteptat de API e dd.mm.YYYY (vezi update_me in users.py)
-        r = client.patch("/users/me", json={"date_of_birth": "15.06.1995"}, headers=h)
+        r = client.put("/users/me", json={"date_of_birth": "15.06.1995"}, headers=h)
         assert r.status_code == 200, r.text
 
 
@@ -169,11 +169,11 @@ class TestVerifiedUserCannotModifyFrozenFields:
         user_id = _get_user_id_from_token(client, token)
 
         # Setez date initiale + marchez verificat
-        client.patch("/users/me", json={"cnp": "1900101000000"}, headers=h)
+        client.put("/users/me", json={"cnp": "1900101000000"}, headers=h)
         _mark_user_verified(_engine(), user_id)
 
         # Incerc sa schimb cnp -> 403
-        r = client.patch("/users/me", json={"cnp": "9999999999999"}, headers=h)
+        r = client.put("/users/me", json={"cnp": "9999999999999"}, headers=h)
         assert r.status_code == 403, r.text
         detail = r.json()["detail"]
         assert detail["error"] == "frozen_field_modification_blocked"
@@ -186,10 +186,10 @@ class TestVerifiedUserCannotModifyFrozenFields:
         h = {"Authorization": f"Bearer {token}"}
         user_id = _get_user_id_from_token(client, token)
 
-        client.patch("/users/me", json={"first_name": "Ion"}, headers=h)
+        client.put("/users/me", json={"first_name": "Ion"}, headers=h)
         _mark_user_verified(_engine(), user_id)
 
-        r = client.patch("/users/me", json={"first_name": "Mihai"}, headers=h)
+        r = client.put("/users/me", json={"first_name": "Mihai"}, headers=h)
         assert r.status_code == 403
         assert "first_name" in r.json()["detail"]["frozen_fields_attempted"]
 
@@ -198,10 +198,10 @@ class TestVerifiedUserCannotModifyFrozenFields:
         h = {"Authorization": f"Bearer {token}"}
         user_id = _get_user_id_from_token(client, token)
         # Format dd.mm.YYYY (vezi update_me)
-        client.patch("/users/me", json={"date_of_birth": "01.01.1990"}, headers=h)
+        client.put("/users/me", json={"date_of_birth": "01.01.1990"}, headers=h)
         _mark_user_verified(_engine(), user_id)
 
-        r = client.patch("/users/me", json={"date_of_birth": "01.01.2000"}, headers=h)
+        r = client.put("/users/me", json={"date_of_birth": "01.01.2000"}, headers=h)
         assert r.status_code == 403
         assert "date_of_birth" in r.json()["detail"]["frozen_fields_attempted"]
 
@@ -223,7 +223,7 @@ class TestVerifiedUserCannotModifyFrozenFields:
                 RETURNING station_id
             """)).scalar()
 
-        r = client.patch("/users/me", json={"home_station_id": s2}, headers=h)
+        r = client.put("/users/me", json={"home_station_id": s2}, headers=h)
         assert r.status_code == 403, r.text
         assert "home_station_id" in r.json()["detail"]["frozen_fields_attempted"]
 
@@ -233,11 +233,11 @@ class TestVerifiedUserCannotModifyFrozenFields:
         h = {"Authorization": f"Bearer {token}"}
         user_id = _get_user_id_from_token(client, token)
 
-        client.patch("/users/me", json={"cnp": "1980505123456"}, headers=h)
+        client.put("/users/me", json={"cnp": "1980505123456"}, headers=h)
         _mark_user_verified(_engine(), user_id)
 
         # Trimit acelasi cnp -> no-op, ar trebui 200
-        r = client.patch("/users/me", json={"cnp": "1980505123456"}, headers=h)
+        r = client.put("/users/me", json={"cnp": "1980505123456"}, headers=h)
         assert r.status_code == 200, r.text
 
 
@@ -260,7 +260,7 @@ class TestVerifiedUserCanStillEditNonFrozenFields:
         # In schimb, verificam ca un PATCH cu doar campuri non-frozen merge.
         # In UserUpdateRequest avem doar campurile frozen + nimic altceva,
         # deci verificam ca un PATCH cu payload gol returneaza 200.
-        r = client.patch("/users/me", json={}, headers=h)
+        r = client.put("/users/me", json={}, headers=h)
         assert r.status_code == 200, r.text
 
 
@@ -275,7 +275,7 @@ class TestExpiredVerificationUnlocksFields:
         h = {"Authorization": f"Bearer {token}"}
         user_id = _get_user_id_from_token(client, token)
 
-        client.patch("/users/me", json={"cnp": "1850707000000"}, headers=h)
+        client.put("/users/me", json={"cnp": "1850707000000"}, headers=h)
 
         # Marchez verificat dar cu valid_until in trecut (expirat)
         expired_date = datetime.now(timezone.utc) - timedelta(days=1)
@@ -288,7 +288,7 @@ class TestExpiredVerificationUnlocksFields:
             f"Expected expired -> not verified, got {status}"
 
         # Si modificarea cnp ar trebui sa mearga
-        r = client.patch("/users/me", json={"cnp": "1850707999999"}, headers=h)
+        r = client.put("/users/me", json={"cnp": "1850707999999"}, headers=h)
         assert r.status_code == 200, r.text
 
 
