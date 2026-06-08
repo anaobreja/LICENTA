@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { buyTicket, quoteTicket, searchStations, searchTrains } from '../services/api'
+import SeatMap from '../components/SeatMap'
 
 const TYPE_LABEL = { single: 'Bilet simplu', return: 'Dus-intors' }
 
@@ -71,6 +72,7 @@ export default function BuyTicket() {
   })
   const [ticketType, setTicketType] = useState('single')
   const [trains, setTrains] = useState([])
+  const [selectedSeatIds, setSelectedSeatIds] = useState([])
   const [searching, setSearching] = useState(false)
   const [selectedTrain, setSelectedTrain] = useState(null)
   const [quote, setQuote] = useState(null)
@@ -119,6 +121,7 @@ export default function BuyTicket() {
         arrival_station_id: toStation.station_id,
         travel_date: travelDate,
         ticket_type: ticketType,
+        seat_ids: selectedSeatIds && selectedSeatIds.length > 0 ? selectedSeatIds : undefined,
       })
       navigate('/tickets', { state: { newTicketId: r.ticket_id } })
     } catch (err) {
@@ -241,7 +244,21 @@ export default function BuyTicket() {
         )}
 
         <div className="flex gap-3 pt-2">
-          <button type="submit" disabled={submitting || !selectedTrain}
+          {selectedTrain && formData.travel_date && from?.station_id && to?.station_id && (
+          <div className="mt-6 p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <h3 className="text-lg font-bold mb-3 text-slate-900 dark:text-slate-100">
+              Alege locurile (optional)
+            </h3>
+            <SeatMap
+              trainId={selectedTrain.train_id}
+              travelDate={formData.travel_date}
+              onSelectionChange={setSelectedSeatIds}
+              maxSeats={4}
+            />
+          </div>
+        )}
+
+        <button type="submit" disabled={submitting || !selectedTrain}
             className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl px-4 py-3 transition">
             {submitting ? 'Se proceseaza...' : 'Cumpara bilet'}
           </button>
