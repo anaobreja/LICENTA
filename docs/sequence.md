@@ -7,7 +7,7 @@ sequenceDiagram
     actor P as Pasager
     participant FE as Frontend React
     participant API as FastAPI
-    participant DB as SQLite
+    participant DB as PostgreSQL
 
     P->>FE: Completează formular înregistrare
     FE->>API: POST /auth/register {email, password}
@@ -42,7 +42,7 @@ sequenceDiagram
     participant FE as Frontend React
     participant API as FastAPI
     participant OCR as easyocr
-    participant DB as SQLite
+    participant DB as PostgreSQL
 
     P->>FE: Apasă "Scanează CI"
     FE->>FE: Deschide camera / file picker
@@ -80,7 +80,7 @@ sequenceDiagram
     actor AU as Agent Universitar
     participant FE as Frontend React
     participant API as FastAPI
-    participant DB as SQLite
+    participant DB as PostgreSQL
 
     AU->>FE: Login cu rol university_agent
     FE->>API: POST /auth/login
@@ -126,7 +126,7 @@ sequenceDiagram
     participant FE_P as Frontend (Pasager)
     participant FE_A as Frontend (Agent)
     participant API as FastAPI
-    participant DB as SQLite
+    participant DB as PostgreSQL
 
     P->>FE_P: Accesează /present (Card Digital)
     FE_P->>API: GET /card/me
@@ -171,7 +171,7 @@ sequenceDiagram
     actor P as Pasager
     participant FE as Frontend
     participant API as FastAPI
-    participant DB as SQLite
+    participant DB as PostgreSQL
 
     P->>FE: Accesează Settings → Export date
     FE->>API: GET /users/me/export

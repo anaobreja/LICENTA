@@ -15,7 +15,7 @@ graph TB
     end
 
     subgraph Persistence["Persistență"]
-        DB[(SQLite\nrailway_demo.db)]
+        DB[(PostgreSQL 16\nrailway_db)]
         FS["Fișiere\nuploads/documents/"]
         PG[(PostgreSQL\nopțional)]
     end
@@ -46,7 +46,7 @@ graph TD
         Core["Core\nsecurity.py — JWT + TOTP + QR\ndatabase.py — SQLAlchemy + seed\nconfig.py — Settings\nroles.py — RBAC"]
     end
 
-    subgraph Database["Baza de date — SQLite / PostgreSQL"]
+    subgraph Database["Baza de date — PostgreSQL 16"]
         UsersT["users · digital_identities\nauth_methods · universities"]
         DocsT["source_documents\ndocument_reviews"]
         CredT["user_credentials · issuers\ndigital_cards · card_presentations\ncard_verifications"]
@@ -77,7 +77,7 @@ graph TD
 | Autentificare | JWT (PyJWT) + TOTP (pyotp) | — |
 | OCR | easyocr | 1.7+ |
 | QR generare | qrcode | 7.4 |
-| Baza de date (dev) | SQLite | built-in |
+| Baza de date | PostgreSQL 16 | Docker container (`docker-compose up -d db`) |
 | Baza de date (prod) | PostgreSQL | 15+ |
 | Containerizare | Docker + Docker Compose | — |
 
@@ -90,7 +90,7 @@ sequenceDiagram
     participant B as Browser
     participant P as Proxy :8765
     participant A as FastAPI :8000
-    participant D as SQLite DB
+    participant D as PostgreSQL DB
 
     B->>P: GET /api/documents/me
     P->>A: GET /documents/me (forward)

@@ -3,7 +3,7 @@
 
 **Assessment Date:** May 14, 2026  
 **Platform:** Railway Digital Identity Platform  
-**Backend Stack:** FastAPI, SQLAlchemy, JWT, TOTP MFA, SQLite/PostgreSQL  
+**Backend Stack:** FastAPI, SQLAlchemy, JWT, TOTP MFA, PostgreSQL 16  
 
 ---
 
@@ -234,7 +234,7 @@ verify_totp_code(decrypted_secret, provided_code)
 - **File:** [backend/app/core/database.py](backend/app/core/database.py#L48-L63)
 - **Features:**
   - Connection pooling with proper timeout configuration
-  - SQLite pragma settings for reliability (WAL mode, busy timeout)
+  - PostgreSQL connection pooling (pool_size=10, pool_pre_ping, pool_recycle=3600)
   - SQLAlchemy pre-ping for connection health
 
 ---
@@ -355,19 +355,19 @@ db_record = db.execute(
 **Severity:** MEDIUM 🟡  
 
 **Issues:**
-- SQLite uses no encryption by default (plain text database file)
+- PostgreSQL stores data unencrypted by default at the filesystem level
 - PostgreSQL instance may not have encryption enabled
 - File [railway_demo.db](railway_demo.db) in repository root is unencrypted
 
 **Impact:** Disk-level access exposes entire database
 
 **Recommendation:**
-- For SQLite: Use sqlcipher for transparent encryption
+- For PostgreSQL: Use Transparent Data Encryption (TDE) or filesystem-level encryption (LUKS / BitLocker)
 - For PostgreSQL: Enable pgcrypto extension
 - For production: Use encrypted storage volumes/drives
 
 ```bash
-# SQLite with sqlcipher
+# PostgreSQL TDE (via pg_tde extension or hosted solution)
 pip install sqlcipher3
 DATABASE_URL=sqlcipher:///database.db?key=your-password
 ```
@@ -736,7 +736,7 @@ def export_me(...):
 - [ ] Add input validation to all endpoints
 - [ ] Implement audit logging for sensitive operations
 - [ ] Set up error logging without sensitive data exposure
-- [ ] Enable PostgreSQL/SQLite logging
+- [ ] Enable PostgreSQL query logging (`log_statement = 'mod'`)
 - [ ] Test CORS configuration thoroughly
 - [ ] Review and restrict admin endpoints
 - [ ] Add database connection encryption (SSL/TLS)

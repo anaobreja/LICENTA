@@ -24,8 +24,6 @@ engine = _create_engine(settings.DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Backend identifier folosit in cod pentru compatibilitate cu importurile existente.
-# Toate ramurile "if DATABASE_BACKEND == 'sqlite'" au fost eliminate.
 DATABASE_BACKEND = "postgresql"
 # Startup verification — ne asiguram ca schema e prezenta
 REQUIRED_TABLES = [
