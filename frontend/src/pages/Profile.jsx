@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { deleteAccount, exportUserData, getUserProfile, getUserProfilePhotoBlobUrl, getMyCredentials, updateProfile, updateProfilePhoto } from '../services/api'
+import { checkAuth, deleteAccount, exportUserData, getUserProfile, getUserProfilePhotoBlobUrl, getMyCredentials, searchStations, updateProfile, updateProfilePhoto } from '../services/api'
 
-function Profile({ user, onAccountDeleted }) {
+function Profile({ user, onAccountDeleted, onUserUpdate }) {
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
   const [form, setForm] = useState({
@@ -11,6 +11,13 @@ function Profile({ user, onAccountDeleted }) {
     phone: '',
     date_of_birth: '',
   })
+  // Ruta personala
+  const [homeStation, setHomeStation] = useState(null)        // { station_id, name, city, code } | null
+  const [universityStation, setUniversityStation] = useState(null)
+  const [stationQuery, setStationQuery] = useState('')
+  const [stationResults, setStationResults] = useState([])
+  const [stationOpen, setStationOpen] = useState(false)
+  const [stationLoading, setStationLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -34,6 +41,8 @@ function Profile({ user, onAccountDeleted }) {
           phone: data.phone || '',
           date_of_birth: data.date_of_birth || '',
         })
+        setHomeStation(data.home_station || null)
+        setUniversityStation(data.university_station || null)
         if (data.has_profile_photo && data.user_id) {
           try {
             const url = await getUserProfilePhotoBlobUrl(data.user_id)
@@ -63,6 +72,35 @@ function Profile({ user, onAccountDeleted }) {
 
   const onChange = (field) => (e) => {
     setForm((prev) => ({ ...prev, [field]: e.target.value }))
+  }
+
+  // Autocomplete stations
+  useEffect(() => {
+    if (!stationOpen) return
+    let alive = true
+    setStationLoading(true)
+    const t = setTimeout(() => {
+      searchStations(stationQuery, 15)
+        .then(r => { if (alive) setStationResults(r || []) })
+        .catch(() => { if (alive) setStationResults([]) })
+        .finally(() => { if (alive) setStationLoading(false) })
+    }, 200)
+    return () => { alive = false; clearTimeout(t) }
+  }, [stationQuery, stationOpen])
+
+  const selectHomeStation = (s) => {
+    setHomeStation({
+      station_id: s.station_id,
+      name: s.name,
+      city: s.city,
+      code: s.code,
+    })
+    setStationQuery('')
+    setStationOpen(false)
+  }
+
+  const clearHomeStation = () => {
+    setHomeStation(null)
   }
 
   const onPhotoSelect = (e) => {
@@ -97,11 +135,13 @@ function Profile({ user, onAccountDeleted }) {
     setError('')
     setSaving(true)
     try {
-      await updateProfile({
+      /* PROFILE_UPDATE_MARKER */ await updateProfile({
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
         phone: form.phone.trim() || null,
         date_of_birth: form.date_of_birth.trim() || null,
+        // 0 = sterge selectia, integer > 0 = seteaza statia
+        home_station_id: homeStation?.station_id ?? 0,
       })
       setMessage('Profil salvat.')
     } catch (err) {
@@ -265,6 +305,83 @@ function Profile({ user, onAccountDeleted }) {
               onChange={onChange('date_of_birth')}
             />
           </div>
+
+          {user?.role === 'passenger' && (
+            <>
+            {/* Ruta personala (pentru reducerea studenteasca) */}
+            <div className="border-t border-slate-200 dark:border-slate-700 pt-5">
+              <h2 className="text-base font-semibold text-slate-700 dark:text-slate-200 mb-1">Ruta ta personala</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Reducerea de student (OUG 11/2024) se aplica pe ruta intre <strong>statia de domiciliu</strong> si <strong>statia universitatii</strong>. Pe alte rute se cumpara cu tarif intreg.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="relative">
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">Statia de domiciliu</label>
+                  {homeStation ? (
+                    <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold truncate text-emerald-900 dark:text-emerald-200">{homeStation.name}</div>
+                        <div className="text-xs text-emerald-700 dark:text-emerald-300 truncate">{homeStation.city} · {homeStation.code}</div>
+                      </div>
+                      <button type="button" onClick={clearHomeStation}
+                        className="text-xs text-emerald-700 dark:text-emerald-300 hover:underline shrink-0">
+                        Schimba
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        value={stationQuery}
+                        onChange={(e) => { setStationQuery(e.target.value); setStationOpen(true) }}
+                        onFocus={() => setStationOpen(true)}
+                        onBlur={() => setTimeout(() => setStationOpen(false), 180)}
+                        placeholder="Caut stația (Iași, Cluj, Constanța, ...)"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                        autoComplete="off"
+                      />
+                      {stationOpen && (
+                        <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-64 overflow-auto">
+                          {stationLoading && <div className="p-3 text-xs text-slate-500">Caut...</div>}
+                          {!stationLoading && stationResults.length === 0 && (
+                            <div className="p-3 text-xs text-slate-500">Niciun rezultat</div>
+                          )}
+                          {stationResults.map((st) => (
+                            <button
+                              key={st.station_id}
+                              type="button"
+                              onMouseDown={(e) => { e.preventDefault(); selectHomeStation(st) }}
+                              className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 text-sm"
+                            >
+                              <div className="font-semibold text-slate-900 dark:text-slate-100">{st.name}</div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">{st.city} · {st.code}</div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">Statia universitatii</label>
+                  {universityStation ? (
+                    <div className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                      <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{universityStation.name}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">Setata automat de agentul universitar</div>
+                    </div>
+                  ) : (
+                    <div className="px-3 py-2 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
+                      Nu este inca asociata o statie pentru universitatea ta.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            </>
+          )}
+
           <button
             type="submit"
             disabled={saving}

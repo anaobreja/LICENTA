@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { buyTicket, quoteTicket, searchStations, searchTrains } from '../services/api'
 
 const TYPE_LABEL = { single: 'Bilet simplu', return: 'Dus-intors' }
@@ -62,8 +62,9 @@ function StationCombobox({ label, value, onChange, placeholder }) {
 
 export default function BuyTicket() {
   const navigate = useNavigate()
-  const [fromStation, setFromStation] = useState(null)
-  const [toStation, setToStation] = useState(null)
+  const location = useLocation()
+  const [fromStation, setFromStation] = useState(location.state?.prefillFrom || null)
+  const [toStation, setToStation] = useState(location.state?.prefillTo || null)
   const [travelDate, setTravelDate] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() + 1)
     return d.toISOString().slice(0, 10)
@@ -202,7 +203,18 @@ export default function BuyTicket() {
             <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">Detalii tarif</div>
             {quoting && <div className="text-sm text-slate-500 animate-pulse">Calculez tariful...</div>}
             {!quoting && quote && (
-              <div className="space-y-1.5 text-sm">
+              <div className="space-y-2.5 text-sm">
+                {/* Banner cu statusul rutei personale */}
+                {quote.is_personal_route ? (
+                  <div className="rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200">
+                    <span className="font-semibold">✓ Ruta ta personala.</span> {quote.route_reason}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                    <span className="font-semibold">⚠ Tarif intreg.</span> {quote.route_reason}
+                  </div>
+                )}
+
                 <div className="flex justify-between">
                   <span className="text-slate-600 dark:text-slate-400">Distanta:</span>
                   <span className="font-mono">{quote.distance_km?.toFixed?.(1) ?? quote.distance_km} km</span>
@@ -213,7 +225,7 @@ export default function BuyTicket() {
                 </div>
                 {quote.discount_percent > 0 && (
                   <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
-                    <span>Reducere student {quote.discount_percent}% (OUG 11/2024):</span>
+                    <span>Reducere student {quote.discount_percent}% (ruta personala):</span>
                     <span className="font-mono">-{quote.savings.toFixed(2)} RON</span>
                   </div>
                 )}

@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { verifyPresentation, getDocumentPhotoBlobUrl, getUserProfilePhotoBlobUrl } from '../services/api'
+import {
+  verifyPresentation,
+  getDocumentPhotoBlobUrl,
+  getUserProfilePhotoBlobUrl,
+  verifyOfflineToken,
+  getVerificationKey,
+} from '../services/api'
 
 function VerifyPresentation() {
   const readerId = 'verify-qr-reader'
@@ -15,7 +21,14 @@ function VerifyPresentation() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [scanning, setScanning] = useState(false)
-  const [flash, setFlash] = useState(null) // { valid: bool } — ecran verde/rosu
+  const [flash, setFlash] = useState(null) // { valid: bool }
+  // Mod offline: verificam tokenul local cu cheia publica Ed25519.
+  // Default OFF (modul online ramine comportamentul existent).
+  const [offlineMode, setOfflineMode] = useState(() => {
+    try { return localStorage.getItem('rdc_offline_mode') === '1' } catch { return false }
+  })
+  const [keyInfo, setKeyInfo] = useState(null) // { kid, fetched_at }
+  const [refreshingKey, setRefreshingKey] = useState(false)
 
   const stopAndClearScanner = async () => {
     const scanner = scannerRef.current
@@ -121,7 +134,11 @@ function VerifyPresentation() {
           if (!mountedRef.current) {
             return
           }
-          await verifyScannedToken(scannedToken)
+          if (offlineMode) {
+            await verifyOfflineScanned(scannedToken)
+          } else {
+            await verifyScannedToken(scannedToken)
+          }
         },
         () => {
           // Ignore per-frame decode failures while camera is searching.
@@ -158,10 +175,87 @@ function VerifyPresentation() {
     }
   }, [])
 
+  // Persistam preferinta + pre-incarcam cheia publica daca activam offline
+  useEffect(() => {
+    try { localStorage.setItem('rdc_offline_mode', offlineMode ? '1' : '0') } catch {}
+    if (offlineMode && !keyInfo) {
+      getVerificationKey()
+        .then((k) => setKeyInfo({ kid: k.kid, fetched_at: k.fetched_at }))
+        .catch(() => {})
+    }
+  }, [offlineMode, keyInfo])
+
+  const refreshKey = async () => {
+    setRefreshingKey(true)
+    try {
+      const k = await getVerificationKey({ force: true })
+      setKeyInfo({ kid: k.kid, fetched_at: k.fetched_at })
+    } catch (e) {
+      setError('Nu am putut actualiza cheia publica: ' + (e.message || e))
+    } finally {
+      setRefreshingKey(false)
+    }
+  }
+
+  // Verificare LOCALA: folosita atit din scanner cit si din form manual cind
+  // offlineMode = true. NU apeleaza server-ul.
+  const verifyOfflineScanned = async (scannedToken) => {
+    setToken(scannedToken)
+    setScanInfo('QR detectat. Verific local cu cheia publica...')
+    setScanning(false)
+    setLoading(true)
+    setResult(null)
+    setIdentityPhotoUrl(null)
+    setProfilePhotoUrl(null)
+    try {
+      const res = await verifyOfflineToken(scannedToken)
+      if (res.valid) {
+        // Construim un "rezultat" compatibil cu UI-ul existent pentru afisaj
+        const p = res.payload
+        setResult({
+          result: 'valid',
+          notes: 'Verificare OFFLINE. Semnatura Ed25519 validata local.',
+          mode: 'offline',
+          card: { card_identifier: `card-${p.card}`, issuer_name: p.issuer },
+          holder: {
+            user_id: p.sub,
+            first_name: p.holder.split(' ')[0] || '',
+            last_name: p.holder.split(' ').slice(1).join(' ') || '',
+          },
+          claims: (p.claims || []).map((t) => ({
+            credential_type: t,
+            claim_value: '(detaliile complete nu sunt incluse offline)',
+            valid_until: p.exp,
+          })),
+        })
+        setFlash({ valid: true })
+      } else {
+        setResult({
+          result: 'invalid',
+          notes: res.reason,
+          mode: 'offline',
+          card: { card_identifier: '-', issuer_name: '-' },
+          holder: { first_name: '-', last_name: '' },
+          claims: [],
+        })
+        setFlash({ valid: false })
+      }
+      setValidationTime(new Date().toLocaleString('ro-RO'))
+      setTimeout(() => setFlash(null), 2000)
+    } catch (e) {
+      setError(e.message || 'Eroare la verificare offline')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const onVerify = async (e) => {
     e.preventDefault()
     setError('')
     setResult(null)
+    if (offlineMode) {
+      return verifyOfflineScanned(token)
+    }
     setLoading(true)
     try {
       const data = await verifyPresentation({ token })
@@ -215,6 +309,56 @@ function VerifyPresentation() {
       <h1 className="text-3xl font-bold mb-2 dark:text-slate-100">Verificare Rail Digital Card</h1>
       <p className="text-slate-600 dark:text-slate-300 mb-6">Validare rapida direct din camera telefonului, cu fallback pe poza/manual.</p>
 
+      {/* Comutator mod online / offline + status cheie publica */}
+      <div className={`mb-4 rounded-2xl border p-4 ${offlineMode
+        ? 'bg-amber-50 border-amber-300 dark:bg-amber-950/30 dark:border-amber-700'
+        : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700'}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className={`inline-block w-2.5 h-2.5 rounded-full ${offlineMode ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <span className="font-semibold text-slate-900 dark:text-slate-100">
+                {offlineMode ? 'Mod OFFLINE (verificare locala)' : 'Mod ONLINE (verificare prin server)'}
+              </span>
+            </div>
+            <p className="text-xs mt-1 text-slate-600 dark:text-slate-300">
+              {offlineMode
+                ? 'Tokenul este verificat local cu cheia publica Ed25519. Util in tunele sau zone fara semnal. Nu se poate marca tokenul ca folosit (anti-replay).'
+                : 'Token-ul este trimis serverului pentru validare. Implicit; ofera verificare anti-replay si revocare in timp real.'}
+            </p>
+            {offlineMode && keyInfo && (
+              <p className="text-[11px] mt-2 font-mono text-amber-800 dark:text-amber-200">
+                kid: {keyInfo.kid} · descarcata: {new Date(keyInfo.fetched_at).toLocaleString('ro-RO')}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col gap-2 shrink-0">
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={offlineMode}
+                onChange={(e) => setOfflineMode(e.target.checked)}
+                className="sr-only peer"
+              />
+              <span className="relative w-11 h-6 bg-slate-300 dark:bg-slate-600 rounded-full peer-checked:bg-amber-500 transition">
+                <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform peer-checked:translate-x-5" />
+              </span>
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">Offline</span>
+            </label>
+            {offlineMode && (
+              <button
+                type="button"
+                onClick={refreshKey}
+                disabled={refreshingKey}
+                className="text-xs px-3 py-1 rounded-lg border border-amber-400 text-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-60"
+              >
+                {refreshingKey ? 'Actualizez...' : 'Reactualizeaza cheia'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {error && <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl mb-4 dark:bg-red-950/40 dark:border-red-800 dark:text-red-200">{error}</div>}
       {scanInfo && <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-xl mb-4 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-200">{scanInfo}</div>}
 
@@ -263,7 +407,14 @@ function VerifyPresentation() {
 
       {result && (
         <div className="mt-6 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm dark:bg-slate-900 dark:border-slate-700">
-          <h2 className="text-xl font-bold mb-2 text-slate-900 dark:text-slate-100">Rezultat: {result.result}</h2>
+          <h2 className="text-xl font-bold mb-2 text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <span>Rezultat: {result.result}</span>
+            {result.mode === 'offline' && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                OFFLINE
+              </span>
+            )}
+          </h2>
           {validationTime && (
             <div className="text-sm text-slate-600 dark:text-slate-300 mb-2">Data validării: {validationTime}</div>
           )}

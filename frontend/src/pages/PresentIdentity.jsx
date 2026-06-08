@@ -35,14 +35,48 @@ export default function PresentIdentity() {
       .finally(() => setLoadingCard(false))
   }, [])
 
+  // Protecție anti-buclă: dacă expires_at vine în trecut (bug de TZ),
+  // NU regenerăm automat — afișăm eroare în loc să spamăm backend-ul.
+  // Pentru auto-regenerare, păstrăm un "lock" pe durata cererii.
+  const generatingRef = useRef(false)
+  const lastGenAtRef = useRef(0)
+
   const startCountdown = (expiresAt) => {
     if (timerRef.current) clearInterval(timerRef.current)
+
+    // Parsare robustă: dacă serverul a trimis fără sufix de TZ (bug vechi),
+    // tratăm ca UTC. JavaScript altfel l-ar interpreta ca ora locală.
+    const expiresMs = (() => {
+      const raw = String(expiresAt)
+      const hasTimezone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)
+      const normalized = hasTimezone ? raw : raw + 'Z'
+      return new Date(normalized).getTime()
+    })()
+
+    // Sanity check: dacă expires_at este în trecut sau prea aproape,
+    // nu mai pornim timer — semnal că ceva e greșit cu serverul/clock-ul.
+    const initialLeft = Math.round((expiresMs - Date.now()) / 1000)
+    if (!Number.isFinite(initialLeft) || initialLeft <= 0) {
+      setSecondsLeft(0)
+      setError(
+        'Token-ul generat are deja data de expirare in trecut. ' +
+        'Verifica ceasul sistemului sau reincarca pagina.'
+      )
+      return
+    }
+
     const tick = () => {
-      const left = Math.max(0, Math.round((new Date(expiresAt) - Date.now()) / 1000))
+      const left = Math.max(0, Math.round((expiresMs - Date.now()) / 1000))
       setSecondsLeft(left)
       if (left === 0) {
         clearInterval(timerRef.current)
-        generate()
+        timerRef.current = null
+        // Auto-regenerare doar dacă nu am cerut deja una recent
+        // (protecție în plus contra buclei chiar dacă alte protecții pică).
+        const now = Date.now()
+        if (now - lastGenAtRef.current > 2000) {
+          generate()
+        }
       }
     }
     tick()
@@ -50,6 +84,11 @@ export default function PresentIdentity() {
   }
 
   const generate = async () => {
+    // Lock: refuzăm concurrent calls (cauza principală a buclei infinite)
+    if (generatingRef.current) return
+    generatingRef.current = true
+    lastGenAtRef.current = Date.now()
+
     setLoading(true); setError('')
     try {
       const data = await generatePresentation({ ttl_seconds: TTL })
@@ -62,7 +101,10 @@ export default function PresentIdentity() {
         setError(e.message || 'Nu am putut genera prezentarea')
       }
     }
-    finally { setLoading(false) }
+    finally {
+      setLoading(false)
+      generatingRef.current = false
+    }
   }
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])

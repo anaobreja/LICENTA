@@ -58,6 +58,10 @@ CREATE TABLE universities (
     city VARCHAR(100) NOT NULL,
     email_domain VARCHAR(100) UNIQUE,
     contact_email VARCHAR(255),
+    -- Statia feroviara principala a centrului universitar.
+    -- Folosita pentru a stabili ruta personala (home_station -> main_station)
+    -- pe care studentul beneficiaza de reducerea de 90% (OUG 11/2024).
+    main_station_id INTEGER,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -111,6 +115,10 @@ CREATE TABLE users (
     mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     -- Issuer link (pentru agentii universitari: catre tabela issuers daca emit credentiale)
     issuer_id INTEGER,
+    -- Statia de domiciliu declarata de pasager (folosita pentru a stabili
+    -- ruta personala pentru care se aplica reducerea de student conform
+    -- OUG 11/2024). NULL = nu a declarat inca.
+    home_station_id INTEGER,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -327,11 +335,24 @@ CREATE TABLE stations (
     city VARCHAR(100) NOT NULL,
     country VARCHAR(100) DEFAULT 'Romania',
     is_active BOOLEAN DEFAULT TRUE,
+    -- Coordonate GPS + metadate universitati (folosite de routerul /map/*)
+    latitude NUMERIC(9, 6),
+    longitude NUMERIC(9, 6),
+    is_university_hub BOOLEAN DEFAULT FALSE,
+    student_count INTEGER DEFAULT 0,
+    universities_count INTEGER DEFAULT 0,
+    notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_stations_code ON stations(code);
 CREATE INDEX idx_stations_city ON stations(city);
+CREATE INDEX idx_stations_geo
+    ON stations(latitude, longitude)
+    WHERE latitude IS NOT NULL;
+CREATE INDEX idx_stations_university_hub
+    ON stations(is_university_hub)
+    WHERE is_university_hub = TRUE;
 -- 14. RUTE
 CREATE TABLE routes (
     route_id SERIAL PRIMARY KEY,
@@ -613,3 +634,20 @@ COMMENT ON VIEW active_travel_entitlements IS 'Drepturi de calatorie valide la m
 COMMENT ON VIEW v_user_credentials_active IS 'Credentiale active per utilizator (claim-uri verificabile)';
 COMMENT ON VIEW v_validations_summary IS 'Detalii pentru fiecare validare de bilet';
 COMMENT ON VIEW university_agent_summary IS 'KPI per universitate pentru dashboard agent';
+
+-- ============================================================
+-- FOREIGN KEYS DEFERATE (referinte catre stations, definita mai sus)
+-- ============================================================
+-- Foreign keys pentru relatia user/universitate -> statie de cale ferata.
+-- Declarate aici (la final) pentru ca stations este definita dupa
+-- users / universities in schema.
+ALTER TABLE users
+    ADD CONSTRAINT fk_users_home_station
+    FOREIGN KEY (home_station_id) REFERENCES stations(station_id) ON DELETE SET NULL;
+
+ALTER TABLE universities
+    ADD CONSTRAINT fk_universities_main_station
+    FOREIGN KEY (main_station_id) REFERENCES stations(station_id) ON DELETE SET NULL;
+
+CREATE INDEX idx_users_home_station ON users(home_station_id) WHERE home_station_id IS NOT NULL;
+CREATE INDEX idx_universities_main_station ON universities(main_station_id) WHERE main_station_id IS NOT NULL;
