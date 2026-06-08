@@ -34,9 +34,10 @@ DURATION_DAYS = {
     "annual": 365,
 }
 
-# Reducere standard CFR pentru studenti, DOAR pe ruta home_station <-> universitate
-# (OUG 11/2024 - acelasi mecanism ca la bilete in tickets._personal_route_status)
-STUDENT_DISCOUNT_PCT = 50.0
+# Reducere CFR pentru studenti, DOAR pe ruta home_station <-> universitate.
+# Conform OUG 11/2024: reducere 90% pe ruta personala student.
+# Aliniat cu STUDENT_DISCOUNT_PERCENT din tickets.py (consistenta cu logica de bilete).
+STUDENT_DISCOUNT_PCT = 90.0
 
 # Formula pret abonament:
 #   base = (distanta_km * COEF_PER_KM + BASE_FEE) * MULTIPLIER_TYPE
@@ -137,7 +138,7 @@ def is_student_route_for_user(
     return {
         "is_match": is_match,
         "reason": (
-            "Ruta corespunde rutei personale home<->universitate (reducere 50%)"
+            "Ruta corespunde rutei personale home<->universitate (reducere 90% OUG 11/2024)"
             if is_match
             else "Ruta NU este home<->universitate (pret intreg)"
         ),
@@ -163,7 +164,7 @@ def compute_subscription_price(
 
     Formula:
       base = (distance_km * COEF_PER_KM + BASE_FEE) * MULTIPLIER_TYPE
-      discount = base * 50% (daca is_student_route)
+      discount = base * 90% (daca is_student_route)
                  0       (altfel)
       final = base - discount
     """

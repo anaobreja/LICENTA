@@ -352,7 +352,7 @@ TestExpiredVerificationUnlocksFields, TestVerificationStatusEndpoint).
    - Aplica formula: `base = (distance * 0.5 + 50) * type_multiplier`
    - Verifica daca userul are credential `student_verified` activ
    - Verifica daca ruta selectata = `home_station ↔ university_station` (regula UC40/OUG 11/2024)
-   - Daca DA: aplica reducere 50%. Altfel: pret intreg.
+   - Daca DA: aplica reducere 90% (OUG 11/2024). Altfel: pret intreg.
    - Returneaza `{base_price, discount_amount, discount_pct, final_price, is_student_route, discount_reason}`
 5. Pasagerul vede pretul + motivul reducerii (sau lipsa ei) si confirma.
 6. `POST /subscriptions/buy`:

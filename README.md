@@ -36,7 +36,7 @@ Sistem de gestionare a **identității digitale** pentru studenți, cu verificar
 - **Verificare offline a cardului digital prin semnături Ed25519** (controlorul poate valida QR-ul fără semnal — vezi secțiunea dedicată mai jos)
 - **Sistem complet de bilete cu logică CFR realistă**: selecție loc real-time (hold 5 min), anti-overlap pe intervale orare, anulare cu refund pe trepte (100% / 50% / 0%), reprogramare pe același traseu — vezi secțiunea dedicată mai jos
 - **Imutabilitate date personale după validare**: câmpurile CNP, nume, data nașterii și stația de domiciliu devin frozen până la expirarea verificării (1 octombrie, începutul anului universitar următor). Previne identity laundering — vezi secțiunea 4.1 din SECURITY_ASSESSMENT.md
-- **Abonamente CFR cu scope pe ruta** (`monthly`/`annual`): cumparare cu reducere 50% pentru studenti pe ruta home <-> universitate (OUG 11/2024), anti-overlap pe ruta, anulare cu refund pro-rata. Biletele pe ruta acoperita devin automat gratuite (price=0, marcate cu `uses_subscription_id`). Notificare 7 zile inainte de expirare. Vezi sectiunea dedicata mai jos.
+- **Abonamente CFR cu scope pe ruta** (`monthly`/`annual`): cumparare cu reducere 90% pentru studenti pe ruta home <-> universitate (OUG 11/2024), anti-overlap pe ruta, anulare cu refund pro-rata. Biletele pe ruta acoperita devin automat gratuite (price=0, marcate cu `uses_subscription_id`). Notificare 7 zile inainte de expirare. Vezi sectiunea dedicata mai jos.
 - **Test automate**: 203 teste backend (pytest, 55 noi: 18 bilete + 17 frozen + 20 abonamente) + 19 teste frontend (Node + Web Crypto API), toate trec
 
 ### Work in progress / Limitări cunoscute
@@ -263,7 +263,7 @@ pentru reducerea de student.
 |---|---|
 | **Tipuri** | `monthly` (30 zile) sau `annual` (365 zile, multiplier x10 = "2 luni gratis") |
 | **Scope** | Pe ruta specifica (acopera direct trenuri intre `from_station_id` <-> `to_station_id`, in ambele directii) |
-| **Pret** | Formula: `(distance_km * 0.5 + 50) * multiplier_type`. Reducere **50% DOAR pe ruta home <-> universitate** pentru studentii cu credential `student_verified` activ. Pe alte rute = pret intreg, indiferent ca esti student. |
+| **Pret** | Formula: `(distance_km * 0.5 + 50) * multiplier_type`. Reducere **90% DOAR pe ruta home <-> universitate** pentru studentii cu credential `student_verified` activ. Pe alte rute = pret intreg, indiferent ca esti student. |
 | **Anti-overlap** | Un singur abonament `active` per (user, ruta) — directiile contează in pereche, nu se pot suprapune Buc->Cluj cu Cluj->Buc |
 | **Integrare bilete** | Bilet cumparat pe ruta acoperita -> **price=0 automat**, `uses_subscription_id` setat in DB. Funcționează la /tickets/buy fara cod aditional. |
 | **Anulare** | Refund pro-rata: `full_not_started` daca abonamentul nu a inceput, `partial_pro_rata` (zile neutilizate × 0.5 penalty CFR) daca < 50% folosit, `0%` dupa. |

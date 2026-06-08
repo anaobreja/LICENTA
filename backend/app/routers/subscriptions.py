@@ -145,7 +145,7 @@ def quote_subscription(
         "distance_km": distance,
         "base_price": base,
         "discount_amount": discount,
-        "discount_pct": 50.0 if student_status["is_match"] else 0.0,
+        "discount_pct": 90.0 if student_status["is_match"] else 0.0,
         "final_price": final,
         "is_student_route": student_status["is_match"],
         "discount_reason": student_status["reason"],

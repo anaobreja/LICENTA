@@ -182,23 +182,23 @@ class TestSubscriptionPriceFormula:
 
     def test_monthly_with_student_discount(self):
         from app.services.subscription_business import compute_subscription_price
-        # base = 100, discount = 50, final = 50
+        # base = 100, discount = 90 (OUG 11/2024 -> 90% student), final = 10
         base, disc, final = compute_subscription_price(
             distance_km=100, subscription_type="monthly", is_student_route=True
         )
         assert base == 100.0
-        assert disc == 50.0
-        assert final == 50.0
+        assert disc == 90.0
+        assert final == 10.0
 
     def test_annual_with_student_discount(self):
         from app.services.subscription_business import compute_subscription_price
-        # base = 100 * 10 = 1000, discount = 500, final = 500
+        # base = 100 * 10 = 1000, discount = 900 (OUG 11/2024 -> 90%), final = 100
         base, disc, final = compute_subscription_price(
             distance_km=100, subscription_type="annual", is_student_route=True
         )
         assert base == 1000.0
-        assert disc == 500.0
-        assert final == 500.0
+        assert disc == 900.0
+        assert final == 100.0
 
     def test_invalid_type_raises(self):
         from app.services.subscription_business import compute_subscription_price
@@ -281,7 +281,7 @@ class TestSubscriptionQuote:
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["is_student_route"] is True
-        assert body["discount_pct"] == 50.0
+        assert body["discount_pct"] == 90.0
         assert body["discount_amount"] > 0
         assert body["final_price"] < body["base_price"]
 
