@@ -332,3 +332,81 @@ inspectate de agent.
 `tests/integration/test_profile_freeze.py` (TestAcademicYearBoundary,
 TestUnverifiedUserCanModifyEverything, TestVerifiedUserCannotModifyFrozenFields,
 TestExpiredVerificationUnlocksFields, TestVerificationStatusEndpoint).
+
+### UC46 - Cumparare abonament CFR cu scope pe ruta
+
+**Actor:** Pasager (cu sau fara identitate verificata).
+
+**Precondi?ii:**
+- User autentificat
+- Statiile de plecare si sosire exista
+- User nu are deja un abonament `active` pe aceeasi ruta (in nicio directie)
+
+**Flux principal:**
+
+1. Pasagerul deschide **Abonamente** -> click "Cumpara abonament nou".
+2. Selecteaza statia de plecare + statia de sosire (typeahead live cu `/stations/search`).
+3. Selecteaza tip: `monthly` sau `annual`.
+4. La fiecare schimbare, frontend-ul cere live un quote via `POST /subscriptions/quote`:
+   - Backend calculeaza distanta din `routes.total_distance_km` (fallback: haversine din coordonate)
+   - Aplica formula: `base = (distance * 0.5 + 50) * type_multiplier`
+   - Verifica daca userul are credential `student_verified` activ
+   - Verifica daca ruta selectata = `home_station ↔ university_station` (regula UC40/OUG 11/2024)
+   - Daca DA: aplica reducere 50%. Altfel: pret intreg.
+   - Returneaza `{base_price, discount_amount, discount_pct, final_price, is_student_route, discount_reason}`
+5. Pasagerul vede pretul + motivul reducerii (sau lipsa ei) si confirma.
+6. `POST /subscriptions/buy`:
+   - Re-verifica anti-overlap (`check_subscription_overlap`)
+   - Insereaza abonament cu `subscription_scope='route'`, `status='active'`
+   - Genereaza notificare confirmare
+7. Pasagerul este redirectionat catre lista de abonamente, cu toast confirmare.
+
+**Postcondi?ii:**
+- Abonament `active` in DB cu `valid_from` = azi, `valid_until` = azi + 30 sau 365 zile
+- Toate biletele cumparate pe ruta acoperita devin automat gratuite (vezi UC47)
+
+**Erori posibile:**
+
+- `400` - statia plecare == sosire / format invalid
+- `400` - distanta indisponibila (statii fara coordonate)
+- `409 subscription_overlap` - exista deja abonament activ pe ruta
+- `401` - token absent/invalid
+
+---
+
+### UC47 - Bilet gratuit via abonament activ
+
+**Actor:** Pasager cu abonament `active` pe ruta selectata.
+
+**Tip:** Extindere a UC31 (Cumparare bilet) - se declanseaza automat la `/tickets/buy`.
+
+**Flux:**
+
+1. Pasagerul completeaza formularul de cumparare bilet ca de obicei (tren, statii, data, tip).
+2. Frontend-ul detecteaza prin `getMySubscriptions()` daca exista abonament `active` care:
+   - Are `subscription_scope='route'`
+   - Acopera ruta selectata (in orice directie)
+   - Are `valid_from <= travel_date <= valid_until`
+3. Daca DA, **banner verde** in pagina BuyTicket:
+   > "Acoperit de abonament. Biletul va fi GRATUIT (0 RON)."
+4. La confirmare, `POST /tickets/buy`:
+   - Backend apeleaza `find_active_subscription_for_route(user, from, to, date)` dupa anti-overlap check
+   - Daca exista match -> dupa INSERT-ul ticketului, face UPDATE: `price=0, discount_applied=100, uses_subscription_id=N`
+   - Restul flow-ului (entitlement, qr_token, seat confirmation) ramane neschimbat
+5. Biletul rezultat este vizibil in **Biletele mele** cu pret 0 RON si poate fi validat in tren ca orice alt bilet.
+
+**Postcondi?ii:**
+- Bilet cu `price=0`, `uses_subscription_id` populat (audit trail)
+- QR token valid pentru validare in tren
+- Abonamentul ramane neschimbat (nu se decrementeaza nr de calatorii - sistem nelimitat in implementarea curenta)
+
+**Reguli speciale:**
+
+- **Anti-overlap normal se aplica**: chiar daca biletul e gratuit, daca userul are alt bilet activ in acelasi interval orar, primeste 409 (regula UC44).
+- Daca abonamentul expira intre `travel_date` cumparare si data reala de calatorie, biletul ramane valid (era valid la momentul cumpararii).
+- Anularea biletului cumparat via abonament nu da refund (pret=0) dar elibereaza locurile rezervate.
+
+**Acoperire teste:**
+
+- `test_ticket_on_covered_route_is_free` - confirma DB: price=0 + uses_subscription_id
+- `test_ticket_on_uncovered_route_has_normal_price` - confirma ca abonamentul pe ruta A nu afecteaza biletul pe ruta B

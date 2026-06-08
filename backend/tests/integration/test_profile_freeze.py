@@ -3,7 +3,7 @@ Integration tests pentru regula de business "datele validate sunt FROZEN":
 
   - Un user NEVERIFICAT poate modifica orice camp din profil.
   - Un user VERIFICAT (are credential identity_verified active) NU poate
-    modifica cnp / first_name / last_name / birth_date / home_station_id.
+    modifica cnp / first_name / last_name / date_of_birth / home_station_id.
   - Avatarul si parola raman editabile (sunt cosmetice / securitate, nu
     date validate).
   - Cand credentialul expira (valid_until < now), userul redevine "neverificat"
@@ -149,11 +149,11 @@ class TestUnverifiedUserCanModifyEverything:
         }, headers=h)
         assert r.status_code == 200, r.text
 
-    def test_unverified_can_change_birth_date(self, client):
+    def test_unverified_can_change_date_of_birth(self, client):
         token = register_and_login(client, "passenger")
         h = {"Authorization": f"Bearer {token}"}
         # Formatul asteptat de API e dd.mm.YYYY (vezi update_me in users.py)
-        r = client.patch("/users/me", json={"birth_date": "15.06.1995"}, headers=h)
+        r = client.patch("/users/me", json={"date_of_birth": "15.06.1995"}, headers=h)
         assert r.status_code == 200, r.text
 
 
@@ -193,17 +193,17 @@ class TestVerifiedUserCannotModifyFrozenFields:
         assert r.status_code == 403
         assert "first_name" in r.json()["detail"]["frozen_fields_attempted"]
 
-    def test_verified_cannot_change_birth_date(self, client):
+    def test_verified_cannot_change_date_of_birth(self, client):
         token = register_and_login(client, "passenger")
         h = {"Authorization": f"Bearer {token}"}
         user_id = _get_user_id_from_token(client, token)
         # Format dd.mm.YYYY (vezi update_me)
-        client.patch("/users/me", json={"birth_date": "01.01.1990"}, headers=h)
+        client.patch("/users/me", json={"date_of_birth": "01.01.1990"}, headers=h)
         _mark_user_verified(_engine(), user_id)
 
-        r = client.patch("/users/me", json={"birth_date": "01.01.2000"}, headers=h)
+        r = client.patch("/users/me", json={"date_of_birth": "01.01.2000"}, headers=h)
         assert r.status_code == 403
-        assert "birth_date" in r.json()["detail"]["frozen_fields_attempted"]
+        assert "date_of_birth" in r.json()["detail"]["frozen_fields_attempted"]
 
     def test_verified_cannot_change_home_station(self, client):
         token = register_and_login(client, "passenger")
@@ -327,7 +327,7 @@ class TestVerificationStatusEndpoint:
         assert body["days_until_expiry"] > 0
         # Toate campurile FROZEN listate
         assert set(body["frozen_fields"]) == {
-            "cnp", "first_name", "last_name", "birth_date", "home_station_id",
+            "cnp", "first_name", "last_name", "date_of_birth", "home_station_id",
         }
         # Academic year format "YYYY-YYYY"
         assert "-" in body["academic_year"]

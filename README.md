@@ -36,7 +36,8 @@ Sistem de gestionare a **identității digitale** pentru studenți, cu verificar
 - **Verificare offline a cardului digital prin semnături Ed25519** (controlorul poate valida QR-ul fără semnal — vezi secțiunea dedicată mai jos)
 - **Sistem complet de bilete cu logică CFR realistă**: selecție loc real-time (hold 5 min), anti-overlap pe intervale orare, anulare cu refund pe trepte (100% / 50% / 0%), reprogramare pe același traseu — vezi secțiunea dedicată mai jos
 - **Imutabilitate date personale după validare**: câmpurile CNP, nume, data nașterii și stația de domiciliu devin frozen până la expirarea verificării (1 octombrie, începutul anului universitar următor). Previne identity laundering — vezi secțiunea 4.1 din SECURITY_ASSESSMENT.md
-- **Test automate**: 183 teste backend (pytest, 35 noi: 18 sistem bilete + 17 frozen fields) + 19 teste frontend (Node + Web Crypto API), toate trec
+- **Abonamente CFR cu scope pe ruta** (`monthly`/`annual`): cumparare cu reducere 50% pentru studenti pe ruta home <-> universitate (OUG 11/2024), anti-overlap pe ruta, anulare cu refund pro-rata. Biletele pe ruta acoperita devin automat gratuite (price=0, marcate cu `uses_subscription_id`). Notificare 7 zile inainte de expirare. Vezi sectiunea dedicata mai jos.
+- **Test automate**: 203 teste backend (pytest, 55 noi: 18 bilete + 17 frozen + 20 abonamente) + 19 teste frontend (Node + Web Crypto API), toate trec
 
 ### Work in progress / Limitări cunoscute
 
@@ -247,6 +248,81 @@ Backend: `tests/integration/test_seats.py`. Acoperă 5 categorii:
 - **Cancel** (4 teste): full refund, nu de 2 ori, doar own ticket, recumpărare după cancel
 - **Seat hold flow** (5 teste): layout, hold, release, conflict cu alt user, buy cu locuri
 - **Reschedule** (2 teste): același traseu OK, traseu diferit → 409
+
+---
+
+## Abonamente CFR (Subscriptions)
+
+Sistemul implementeaza abonamente cu scope pe **ruta** (origin <-> destination),
+inspirat de produsele CFR Calatori (lunar / anual) si de prevederile **OUG 11/2024**
+pentru reducerea de student.
+
+### Reguli de business
+
+| Capacitate | Detalii |
+|---|---|
+| **Tipuri** | `monthly` (30 zile) sau `annual` (365 zile, multiplier x10 = "2 luni gratis") |
+| **Scope** | Pe ruta specifica (acopera direct trenuri intre `from_station_id` <-> `to_station_id`, in ambele directii) |
+| **Pret** | Formula: `(distance_km * 0.5 + 50) * multiplier_type`. Reducere **50% DOAR pe ruta home <-> universitate** pentru studentii cu credential `student_verified` activ. Pe alte rute = pret intreg, indiferent ca esti student. |
+| **Anti-overlap** | Un singur abonament `active` per (user, ruta) — directiile contează in pereche, nu se pot suprapune Buc->Cluj cu Cluj->Buc |
+| **Integrare bilete** | Bilet cumparat pe ruta acoperita -> **price=0 automat**, `uses_subscription_id` setat in DB. Funcționează la /tickets/buy fara cod aditional. |
+| **Anulare** | Refund pro-rata: `full_not_started` daca abonamentul nu a inceput, `partial_pro_rata` (zile neutilizate × 0.5 penalty CFR) daca < 50% folosit, `0%` dupa. |
+| **Lazy expire** | La fiecare `GET /subscriptions/my`, abonamentele cu `valid_until < azi` sunt marcate automat `expired` (fara cron). |
+| **Notificare 7 zile** | La GET /my, daca exista abonament activ cu `valid_until` in <=7 zile, sistemul insereaza automat o notificare "expira curand". |
+
+### Arhitectura DB
+
+Migrarea `07_subscriptions_route_scope.sql` adauga pe `subscriptions`:
+
+```
+from_station_id    INT FK -> stations    -- statia de plecare a rutei
+to_station_id      INT FK -> stations    -- statia de sosire
+subscription_scope VARCHAR(20)           -- 'network' | 'route' (default 'route')
+route_distance_km  NUMERIC(8,2)          -- cache pentru calcul rapid pret
+```
+
+Plus pe `tickets`:
+```
+uses_subscription_id INT FK -> subscriptions  -- marcheaza bilet cumparat via abonament
+```
+
+Constraint critic:
+```sql
+CHECK (subscription_scope != 'route'
+       OR (from_station_id IS NOT NULL
+           AND to_station_id IS NOT NULL
+           AND from_station_id != to_station_id))
+```
+
+### Endpoint-uri noi
+
+| Metoda | Path | Descriere |
+|---|---|---|
+| `POST` | `/subscriptions/quote` | Preview pret cu reducere conditionata (fara DB write) |
+| `POST` | `/subscriptions/buy` | Cumparare cu anti-overlap |
+| `GET` | `/subscriptions/my` | Lista mea (sortat active > expired > cancelled). Trigger lazy expire + notificare 7 zile. |
+| `POST` | `/subscriptions/{id}/cancel` | Anulare cu refund pro-rata CFR |
+
+### Scenariu demo "wow"
+
+1. **Login** `pasager.demo`. Mergi la **Abonamente** -> "Cumpara abonament nou".
+2. Selecteaza statiile de plecare/sosire. Daca esti student verificat si selectezi home <-> univ, **reducerea 50% apare in preview live**. Pe alte rute, pret intreg.
+3. Confirma cumpararea -> abonament activ, valabil 30 zile.
+4. Mergi la **Bilete** -> selecteaza acelasi traseu + aceeasi data.
+5. **Banner verde**: "Acoperit de abonament. Biletul va fi GRATUIT (0 RON)".
+6. Confirma -> bilet emis cu `price=0`, `uses_subscription_id=N`. QR token genereaza normal -> poate fi validat in tren ca orice bilet normal.
+
+### Teste (20 noi, toate trec)
+
+Backend: `tests/integration/test_subscriptions.py`. 6 categorii:
+
+- **Formula pret** (4 unit tests): monthly/annual cu/fara reducere
+- **Refund pro-rata** (3 unit tests): full_not_started, partial, more_than_half
+- **Quote endpoint** (3): fara reducere, cu reducere home<->univ, fara reducere pe alta ruta
+- **Buy + anti-overlap** (4): creeaza activ, overlap same direction, overlap reverse, multiple rute OK
+- **Cancel** (3): refund OK, alt user 403, double cancel 409
+- **Lazy expire** (1): valid_until trecut -> status='expired' la GET
+- **Integrare bilete** (2): bilet pe ruta acoperita = 0 RON, pe alta = pret normal
 
 ---
 
