@@ -79,7 +79,7 @@ echo.
 call .venv_win\Scripts\activate.bat
 pushd backend
 echo [1/2] Rulez unit tests (fara DB)...
-pytest tests\unit -v --tb=short
+pytest tests\unit --tb=line -q
 set BACKEND_EXIT=!errorlevel!
 popd
 
@@ -244,9 +244,10 @@ if errorlevel 1 (
 pushd backend
 if defined COVERAGE (
     echo   [Coverage mode] Rulez cu --cov=app --cov-report=html --cov-report=term
-    pytest %TEST_PATH% --cov=app --cov-report=html --cov-report=term-missing --tb=short > _cov_run.log 2>&1
+    pytest %TEST_PATH% --cov=app --cov-report=html --cov-report=term-missing --tb=line -q > _cov_run.log 2>&1
     set BACKEND_EXIT=!errorlevel!
-    type _cov_run.log
+    REM Afisez doar liniile relevante (rezumat + fail-uri + coverage table)
+    findstr /R /C:"^=*" /C:"FAILED" /C:"ERROR" /C:"passed" /C:"failed" /C:"warning" /C:"Cover" /C:"TOTAL" /C:"^app\\" /C:"^----" /C:"^tests" _cov_run.log
     REM Extrag cifra TOTAL coverage din output (ultima linie cu "TOTAL")
     for /f "tokens=4" %%a in ('findstr /R /C:"^TOTAL" _cov_run.log') do set COVERAGE_PCT=%%a
     del _cov_run.log 2>nul
@@ -258,13 +259,14 @@ if defined COVERAGE (
 ) else (
     REM Default mod ALL/unit/integration/e2e: adaug coverage discreet (term only, nu HTML)
     if /i "%MODE%"=="all" (
-        pytest %TEST_PATH% -v --tb=short --cov=app --cov-report=term > _cov_run.log 2>&1
+        pytest %TEST_PATH% --cov=app --cov-report=term --tb=line -q > _cov_run.log 2>&1
         set BACKEND_EXIT=!errorlevel!
-        type _cov_run.log
+        REM Afisez doar liniile relevante (rezumat + fail-uri + coverage table)
+        findstr /R /C:"^=*" /C:"FAILED" /C:"ERROR" /C:"passed" /C:"failed" /C:"warning" /C:"Cover" /C:"TOTAL" /C:"^app\\" /C:"^----" _cov_run.log
         for /f "tokens=4" %%a in ('findstr /R /C:"^TOTAL" _cov_run.log') do set COVERAGE_PCT=%%a
         del _cov_run.log 2>nul
     ) else (
-        pytest %TEST_PATH% -v --tb=short
+        pytest %TEST_PATH% --tb=line -q
         set BACKEND_EXIT=!errorlevel!
     )
 )
