@@ -432,7 +432,7 @@ def delete_me(authorization: str | None = Header(default=None), db: Session = De
 # ============================================================================
 
 
-@router.get("/users/me/verification-status")
+@router.get("/me/verification-status")
 def my_verification_status(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),

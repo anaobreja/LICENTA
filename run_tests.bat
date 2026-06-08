@@ -311,15 +311,6 @@ if !BACKEND_EXIT! EQU 0 (
 ) else (
     echo   Backend:   FAILED  ^(exit code !BACKEND_EXIT!^)
 )
-echo   Frontend:  !FRONTEND_STATUS!  ^(19 teste pe verifyOfflineToken Ed25519^)
-echo.
-echo   Stack tehnologic acoperit:
-echo     - Ed25519 cryptographic signing (signing.py, crypto_keys.py): 100%%
-echo     - Business logic abonamente CFR: 94%%
-echo     - Identity verification + frozen fields: 94%%
-echo     - JWT auth + TOTP + bcrypt (security.py): 91%%
-echo ============================================================================
-echo.
 
 if !BACKEND_EXIT! NEQ 0 (
     pause

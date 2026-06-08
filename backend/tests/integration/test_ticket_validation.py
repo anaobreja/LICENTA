@@ -55,8 +55,10 @@ def _make_verifier_with_fresh_token(client) -> str:
     assert reg.status_code in (200, 201), reg.text
 
     with _engine().begin() as conn:
+        # Rolul real in DB e 'conductor' (CHECK constraint).
+        # normalize_role() din Python il converteste la 'train_verifier' la runtime.
         conn.execute(text(
-            "UPDATE users SET role = 'train_verifier' WHERE email = :em"
+            "UPDATE users SET role = 'conductor' WHERE email = :em"
         ), {"em": email})
 
     # Login fresh -> JWT cu noul rol (decode_token-ul foloseste role din token)

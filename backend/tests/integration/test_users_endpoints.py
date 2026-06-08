@@ -49,7 +49,7 @@ class TestChangePassword:
         token = register_and_login(client, "pwd_success_unique")
         h = {"Authorization": f"Bearer {token}"}
 
-        r = client.patch(
+        r = client.put(
             "/users/me/password",
             json={
                 "current_password": DEFAULT_PASSWORD,
@@ -64,7 +64,7 @@ class TestChangePassword:
         token = register_and_login(client, "pwd_wrong_unique")
         h = {"Authorization": f"Bearer {token}"}
 
-        r = client.patch(
+        r = client.put(
             "/users/me/password",
             json={
                 "current_password": "WrongCurrent!",
@@ -79,7 +79,7 @@ class TestChangePassword:
         token = register_and_login(client, "pwd_short_unique")
         h = {"Authorization": f"Bearer {token}"}
 
-        r = client.patch(
+        r = client.put(
             "/users/me/password",
             json={
                 "current_password": DEFAULT_PASSWORD,
@@ -91,7 +91,7 @@ class TestChangePassword:
         assert r.status_code in (400, 422), r.text
 
     def test_change_password_requires_auth(self, client):
-        r = client.patch(
+        r = client.put(
             "/users/me/password",
             json={"current_password": "x", "new_password": "yyyyyyyy"},
         )
@@ -127,19 +127,12 @@ class TestExportMyData:
 class TestDeleteMyAccount:
 
     def test_delete_own_account(self, client):
-        token = register_and_login(client, "passenger")
+        """Endpoint real: DELETE /users/me (fara body)."""
+        token = register_and_login(client, "passenger_del")
         h = {"Authorization": f"Bearer {token}"}
         user_id = _get_user_id(client, token)
 
-        # Endpoint real: POST /users/me/delete cu body
-        r = client.post(
-            "/users/me/delete",
-            json={
-                "password": DEFAULT_PASSWORD,
-                "confirmation": "DELETE_MY_ACCOUNT",
-            },
-            headers=h,
-        )
+        r = client.delete("/users/me", headers=h)
         assert r.status_code in (200, 204), r.text
 
         # Verific in DB: hard delete sau soft delete
@@ -165,7 +158,7 @@ class TestProfilePhotoUpload:
         token = register_and_login(client, "passenger")
         h = {"Authorization": f"Bearer {token}"}
 
-        files = {"file": ("photo.png", io.BytesIO(_png()), "image/png")}
+        files = {"profile_photo": ("photo.png", io.BytesIO(_png()), "image/png")}
         r = client.put("/users/me/profile-photo", files=files, headers=h)
         assert r.status_code in (200, 201), r.text
 
@@ -174,12 +167,12 @@ class TestProfilePhotoUpload:
         token = register_and_login(client, "passenger")
         h = {"Authorization": f"Bearer {token}"}
 
-        files = {"file": ("doc.txt", io.BytesIO(b"text content"), "text/plain")}
+        files = {"profile_photo": ("doc.txt", io.BytesIO(b"text content"), "text/plain")}
         r = client.put("/users/me/profile-photo", files=files, headers=h)
         assert r.status_code in (400, 415, 422), r.text  # 422 = FastAPI form validation
 
     def test_upload_requires_auth(self, client):
-        files = {"file": ("p.png", io.BytesIO(_png()), "image/png")}
+        files = {"profile_photo": ("p.png", io.BytesIO(_png()), "image/png")}
         r = client.put("/users/me/profile-photo", files=files)
         assert r.status_code in (401, 403, 422)
 
@@ -188,12 +181,12 @@ class TestProfilePhotoUpload:
         token = register_and_login(client, "passenger")
         h = {"Authorization": f"Bearer {token}"}
 
-        files1 = {"file": ("a.png", io.BytesIO(_png()), "image/png")}
+        files1 = {"profile_photo": ("a.png", io.BytesIO(_png()), "image/png")}
         r1 = client.put("/users/me/profile-photo", files=files1, headers=h)
         assert r1.status_code in (200, 201)
 
         new_content = b"\x89PNG\r\n\x1a\n" + b"y" * 200
-        files2 = {"file": ("b.png", io.BytesIO(new_content), "image/png")}
+        files2 = {"profile_photo": ("b.png", io.BytesIO(new_content), "image/png")}
         r2 = client.put("/users/me/profile-photo", files=files2, headers=h)
         assert r2.status_code in (200, 201)
 
@@ -205,15 +198,17 @@ class TestProfilePhotoUpload:
 class TestProfilePhotoDownload:
 
     def test_get_photo_after_upload_returns_image(self, client):
-        """register_and_login uploadeaza implicit o poza."""
-        token = register_and_login(client, "passenger")
+        """register_and_login uploadeaza implicit o poza. Download via /users/{id}/profile-photo."""
+        token = register_and_login(client, "passenger_dl")
+        user_id = _get_user_id(client, token)
         h = {"Authorization": f"Bearer {token}"}
 
-        r = client.get("/users/me/profile-photo", headers=h)
+        r = client.get(f"/users/{user_id}/profile-photo", headers=h)
         assert r.status_code == 200, r.text
         ct = r.headers.get("content-type", "")
         assert ct.startswith("image/"), f"Got content-type: {ct}"
 
     def test_get_photo_requires_auth(self, client):
-        r = client.get("/users/me/profile-photo")
+        # Cere user_id valid in path
+        r = client.get("/users/1/profile-photo")
         assert r.status_code in (401, 403, 422)

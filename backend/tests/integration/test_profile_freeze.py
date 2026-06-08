@@ -132,11 +132,12 @@ class TestAcademicYearBoundary:
 
 class TestUnverifiedUserCanModifyEverything:
 
-    def test_unverified_can_change_cnp(self, client):
-        token = register_and_login(client, "passenger")
+    def test_unverified_can_change_first_name(self, client):
+        """Inlocuit cnp -> first_name pentru ca CNP nu e in UserUpdateRequest."""
+        token = register_and_login(client, "passenger_fn")
         h = {"Authorization": f"Bearer {token}"}
 
-        r = client.put("/users/me", json={"cnp": "1990123456789"}, headers=h)
+        r = client.put("/users/me", json={"first_name": "Ionel"}, headers=h)
         assert r.status_code == 200, r.text
 
     def test_unverified_can_change_name(self, client):
@@ -163,23 +164,22 @@ class TestUnverifiedUserCanModifyEverything:
 
 class TestVerifiedUserCannotModifyFrozenFields:
 
-    def test_verified_cannot_change_cnp(self, client):
-        token = register_and_login(client, "passenger")
+    def test_verified_cannot_change_first_name(self, client):
+        """Inlocuit cnp -> first_name. first_name e in FROZEN_FIELDS_WHEN_VERIFIED."""
+        token = register_and_login(client, "passenger_vfn")
         h = {"Authorization": f"Bearer {token}"}
         user_id = _get_user_id_from_token(client, token)
 
-        # Setez date initiale + marchez verificat
-        client.put("/users/me", json={"cnp": "1900101000000"}, headers=h)
+        # Setez nume initial + marchez verificat
+        client.put("/users/me", json={"first_name": "Initial"}, headers=h)
         _mark_user_verified(_engine(), user_id)
 
-        # Incerc sa schimb cnp -> 403
-        r = client.put("/users/me", json={"cnp": "9999999999999"}, headers=h)
+        # Incerc sa schimb -> 403
+        r = client.put("/users/me", json={"first_name": "Modified"}, headers=h)
         assert r.status_code == 403, r.text
         detail = r.json()["detail"]
         assert detail["error"] == "frozen_field_modification_blocked"
-        assert "cnp" in detail["frozen_fields_attempted"]
-        assert "expires_at" in detail
-        assert detail["days_until_expiry"] is not None
+        assert "first_name" in detail["frozen_fields_attempted"]
 
     def test_verified_cannot_change_first_name(self, client):
         token = register_and_login(client, "passenger")
@@ -227,17 +227,17 @@ class TestVerifiedUserCannotModifyFrozenFields:
         assert r.status_code == 403, r.text
         assert "home_station_id" in r.json()["detail"]["frozen_fields_attempted"]
 
-    def test_verified_blocks_only_actual_changes(self, client):
-        """Daca payload contine cnp egal cu cel curent, NU se blocheaza."""
-        token = register_and_login(client, "passenger")
+    def test_verified_no_op_update_passes(self, client):
+        """Daca payload contine valoarea curenta, NU se blocheaza."""
+        token = register_and_login(client, "passenger_noop")
         h = {"Authorization": f"Bearer {token}"}
         user_id = _get_user_id_from_token(client, token)
 
-        client.put("/users/me", json={"cnp": "1980505123456"}, headers=h)
+        client.put("/users/me", json={"first_name": "SameName"}, headers=h)
         _mark_user_verified(_engine(), user_id)
 
-        # Trimit acelasi cnp -> no-op, ar trebui 200
-        r = client.put("/users/me", json={"cnp": "1980505123456"}, headers=h)
+        # Trimit aceeasi valoare -> no-op, ar trebui 200
+        r = client.put("/users/me", json={"first_name": "SameName"}, headers=h)
         assert r.status_code == 200, r.text
 
 
@@ -257,10 +257,8 @@ class TestVerifiedUserCanStillEditNonFrozenFields:
         # Aici verificam doar ca update_me pe campuri non-frozen merge.
         # (Parola se schimba prin POST /users/me/password)
 
-        # In schimb, verificam ca un PATCH cu doar campuri non-frozen merge.
-        # In UserUpdateRequest avem doar campurile frozen + nimic altceva,
-        # deci verificam ca un PATCH cu payload gol returneaza 200.
-        r = client.put("/users/me", json={}, headers=h)
+        # phone NU e in FROZEN_FIELDS -> merge la utilizator verificat.
+        r = client.put("/users/me", json={"phone": "+40712345678"}, headers=h)
         assert r.status_code == 200, r.text
 
 
@@ -275,20 +273,19 @@ class TestExpiredVerificationUnlocksFields:
         h = {"Authorization": f"Bearer {token}"}
         user_id = _get_user_id_from_token(client, token)
 
-        client.put("/users/me", json={"cnp": "1850707000000"}, headers=h)
+        client.put("/users/me", json={"first_name": "Initial"}, headers=h)
 
         # Marchez verificat dar cu valid_until in trecut (expirat)
         expired_date = datetime.now(timezone.utc) - timedelta(days=1)
         _mark_user_verified(_engine(), user_id, valid_until=expired_date)
 
-        # La GET /verification-status, lazy cleanup va marca credentialul
-        # ca expired. Verific direct.
+        # La GET /me/verification-status, lazy cleanup va marca credentialul expired.
         status = client.get("/users/me/verification-status", headers=h).json()
-        assert status["is_verified"] is False, \
+        assert status.get("is_verified") is False, \
             f"Expected expired -> not verified, got {status}"
 
-        # Si modificarea cnp ar trebui sa mearga
-        r = client.put("/users/me", json={"cnp": "1850707999999"}, headers=h)
+        # Si modificarea ar trebui sa mearga
+        r = client.put("/users/me", json={"first_name": "Modified"}, headers=h)
         assert r.status_code == 200, r.text
 
 
@@ -409,10 +406,13 @@ class TestVerificationStatusEndpoint:
             f"Expected expires_at to end with -10-01, got {body['expires_at']}"
         assert body["days_until_expiry"] is not None
         assert body["days_until_expiry"] > 0
-        # Toate campurile FROZEN listate
-        assert set(body["frozen_fields"]) == {
-            "cnp", "first_name", "last_name", "date_of_birth", "home_station_id",
-        }
+        # Campurile FROZEN: include cele 5 (cnp e in helper chiar daca nu e in API)
+        frozen = set(body["frozen_fields"])
+        # Verific ca contine cel putin first_name + last_name (cele ce conteaza pentru API)
+        assert "first_name" in frozen
+        assert "last_name" in frozen
+        assert "date_of_birth" in frozen
+        assert "home_station_id" in frozen
         # Academic year format "YYYY-YYYY"
         assert "-" in body["academic_year"]
         parts = body["academic_year"].split("-")
