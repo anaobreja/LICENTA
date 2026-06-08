@@ -8,6 +8,8 @@
 --   * Index pe coloane folosite frecvent in WHERE / JOIN
 --   * TIMESTAMP fara TZ (aplicatia normalizeaza la UTC in Python)
 -- DROP ORDER: dinspre dependinte spre tabele de baza
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
 DROP VIEW IF EXISTS v_user_credentials_active CASCADE;
 DROP VIEW IF EXISTS v_validations_summary CASCADE;
 DROP VIEW IF EXISTS active_travel_entitlements CASCADE;
@@ -17,6 +19,7 @@ DROP VIEW IF EXISTS pending_student_benefits CASCADE;
 DROP VIEW IF EXISTS university_agent_summary CASCADE;
 
 DROP TABLE IF EXISTS audit_logs CASCADE;
+DROP TABLE IF EXISTS tariff_brackets CASCADE;
 DROP TABLE IF EXISTS validations CASCADE;
 DROP TABLE IF EXISTS qr_tokens CASCADE;
 DROP TABLE IF EXISTS travel_entitlements CASCADE;
@@ -55,6 +58,10 @@ CREATE TABLE universities (
     city VARCHAR(100) NOT NULL,
     email_domain VARCHAR(100) UNIQUE,
     contact_email VARCHAR(255),
+    -- Statia feroviara principala a centrului universitar.
+    -- Folosita pentru a stabili ruta personala (home_station -> main_station)
+    -- pe care studentul beneficiaza de reducerea de 90% (OUG 11/2024).
+    main_station_id INTEGER,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -108,6 +115,10 @@ CREATE TABLE users (
     mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     -- Issuer link (pentru agentii universitari: catre tabela issuers daca emit credentiale)
     issuer_id INTEGER,
+    -- Statia de domiciliu declarata de pasager (folosita pentru a stabili
+    -- ruta personala pentru care se aplica reducerea de student conform
+    -- OUG 11/2024). NULL = nu a declarat inca.
+    home_station_id INTEGER,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -324,11 +335,24 @@ CREATE TABLE stations (
     city VARCHAR(100) NOT NULL,
     country VARCHAR(100) DEFAULT 'Romania',
     is_active BOOLEAN DEFAULT TRUE,
+    -- Coordonate GPS + metadate universitati (folosite de routerul /map/*)
+    latitude NUMERIC(9, 6),
+    longitude NUMERIC(9, 6),
+    is_university_hub BOOLEAN DEFAULT FALSE,
+    student_count INTEGER DEFAULT 0,
+    universities_count INTEGER DEFAULT 0,
+    notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_stations_code ON stations(code);
 CREATE INDEX idx_stations_city ON stations(city);
+CREATE INDEX idx_stations_geo
+    ON stations(latitude, longitude)
+    WHERE latitude IS NOT NULL;
+CREATE INDEX idx_stations_university_hub
+    ON stations(is_university_hub)
+    WHERE is_university_hub = TRUE;
 -- 14. RUTE
 CREATE TABLE routes (
     route_id SERIAL PRIMARY KEY,
@@ -370,14 +394,15 @@ CREATE TABLE trains (
     train_id SERIAL PRIMARY KEY,
     operator_id INTEGER NOT NULL,
     route_id INTEGER NOT NULL,
-    train_number VARCHAR(50) NOT NULL UNIQUE,
+    train_number VARCHAR(50) NOT NULL,
     train_type VARCHAR(50) NOT NULL
         CHECK (train_type IN ('regio', 'interregio', 'intercity', 'express', 'high_speed')),
     capacity_seats INTEGER,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (operator_id) REFERENCES railway_operators(operator_id) ON DELETE RESTRICT,
-    FOREIGN KEY (route_id) REFERENCES routes(route_id) ON DELETE RESTRICT
+    FOREIGN KEY (route_id) REFERENCES routes(route_id) ON DELETE RESTRICT,
+    UNIQUE (operator_id, train_number)
 );
 
 CREATE INDEX idx_trains_operator_id ON trains(operator_id);
@@ -514,6 +539,27 @@ CREATE INDEX idx_audit_logs_action_type ON audit_logs(action_type);
 CREATE INDEX idx_audit_logs_target_table ON audit_logs(target_table);
 CREATE INDEX idx_audit_logs_action_timestamp ON audit_logs(action_timestamp);
 -- VIEW: drepturi de calatorie active
+-- 23. TARIFF BRACKETS - tarifar pe trepte de distanta
+CREATE TABLE tariff_brackets (
+    id SERIAL PRIMARY KEY,
+    train_category VARCHAR(10) NOT NULL
+        CHECK (train_category IN ('R', 'IR', 'IC', 'IR-N')),
+    train_class    INTEGER NOT NULL DEFAULT 2
+        CHECK (train_class IN (1, 2)),
+    km_from INTEGER NOT NULL CHECK (km_from >= 0),
+    km_to   INTEGER NOT NULL CHECK (km_to > km_from),
+    price_ron NUMERIC(6, 2) NOT NULL CHECK (price_ron > 0),
+    valid_from DATE NOT NULL DEFAULT '2025-01-01',
+    valid_until DATE,
+    UNIQUE (train_category, train_class, km_from, km_to)
+);
+
+CREATE INDEX idx_tariff_brackets_lookup
+    ON tariff_brackets (train_category, train_class, km_from, km_to);
+
+COMMENT ON TABLE tariff_brackets IS 'Tarife pe trepte de distanta - aproximeaza Tariful 100 CFR Calatori';
+
+
 CREATE VIEW active_travel_entitlements AS
 SELECT
     te.entitlement_id,
@@ -588,3 +634,20 @@ COMMENT ON VIEW active_travel_entitlements IS 'Drepturi de calatorie valide la m
 COMMENT ON VIEW v_user_credentials_active IS 'Credentiale active per utilizator (claim-uri verificabile)';
 COMMENT ON VIEW v_validations_summary IS 'Detalii pentru fiecare validare de bilet';
 COMMENT ON VIEW university_agent_summary IS 'KPI per universitate pentru dashboard agent';
+
+-- ============================================================
+-- FOREIGN KEYS DEFERATE (referinte catre stations, definita mai sus)
+-- ============================================================
+-- Foreign keys pentru relatia user/universitate -> statie de cale ferata.
+-- Declarate aici (la final) pentru ca stations este definita dupa
+-- users / universities in schema.
+ALTER TABLE users
+    ADD CONSTRAINT fk_users_home_station
+    FOREIGN KEY (home_station_id) REFERENCES stations(station_id) ON DELETE SET NULL;
+
+ALTER TABLE universities
+    ADD CONSTRAINT fk_universities_main_station
+    FOREIGN KEY (main_station_id) REFERENCES stations(station_id) ON DELETE SET NULL;
+
+CREATE INDEX idx_users_home_station ON users(home_station_id) WHERE home_station_id IS NOT NULL;
+CREATE INDEX idx_universities_main_station ON universities(main_station_id) WHERE main_station_id IS NOT NULL;

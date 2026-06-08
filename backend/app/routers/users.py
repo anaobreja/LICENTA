@@ -65,6 +65,9 @@ class UserUpdateRequest(BaseModel):
     last_name: Optional[str] = Field(default=None, min_length=2, max_length=100)
     phone: Optional[str] = Field(default=None, max_length=30)
     date_of_birth: Optional[str] = Field(default=None, max_length=32)
+    # Statia de domiciliu declarata de pasager pentru ruta personala.
+    # Trimite 0 sau null ca sa stergi setarea.
+    home_station_id: Optional[int] = Field(default=None, ge=0)
 
 
 class UserPasswordChangeRequest(BaseModel):
@@ -91,10 +94,22 @@ def me(authorization: str | None = Header(default=None), db: Session = Depends(g
     row = db.execute(
         text(
             """
-            SELECT user_id, first_name, last_name, email, phone, date_of_birth, role, is_active,
-                   mfa_enabled, university_name, profile_photo_path
-            FROM users
-            WHERE user_id = :user_id
+            SELECT
+                u.user_id, u.first_name, u.last_name, u.email, u.phone,
+                u.date_of_birth, u.role, u.is_active,
+                u.mfa_enabled, u.university_name, u.profile_photo_path,
+                u.home_station_id,
+                hs.name AS home_station_name,
+                hs.city AS home_station_city,
+                hs.code AS home_station_code,
+                un.main_station_id  AS university_station_id,
+                us.name AS university_station_name,
+                un.short_name       AS university_short_name
+            FROM users u
+            LEFT JOIN stations     hs ON hs.station_id    = u.home_station_id
+            LEFT JOIN universities un ON un.university_id = u.university_id
+            LEFT JOIN stations     us ON us.station_id    = un.main_station_id
+            WHERE u.user_id = :user_id
             """
         ),
         {"user_id": user_id},
@@ -106,6 +121,22 @@ def me(authorization: str | None = Header(default=None), db: Session = Depends(g
             detail="User not found",
         )
 
+    home_station = None
+    if row.get("home_station_id"):
+        home_station = {
+            "station_id": row["home_station_id"],
+            "name": row.get("home_station_name"),
+            "city": row.get("home_station_city"),
+            "code": row.get("home_station_code"),
+        }
+
+    university_station = None
+    if row.get("university_station_id"):
+        university_station = {
+            "station_id": row["university_station_id"],
+            "name": row.get("university_station_name"),
+        }
+
     return {
         "user_id": row["user_id"],
         "first_name": row["first_name"],
@@ -114,9 +145,13 @@ def me(authorization: str | None = Header(default=None), db: Session = Depends(g
         "phone": row.get("phone"),
         "date_of_birth": row.get("date_of_birth"),
         "university_name": row.get("university_name"),
+        "university_short_name": row.get("university_short_name"),
         "has_profile_photo": bool(row.get("profile_photo_path")),
         "role": normalize_role(row["role"]),
         "mfa_enabled": _mfa_enabled_value(row.get("mfa_enabled")),
+        # Ruta personala — folosita la cumpararea de bilete cu reducere
+        "home_station": home_station,
+        "university_station": university_station,
     }
 
 
@@ -182,6 +217,21 @@ def update_me(
         updates["phone"] = payload.phone
     if payload.date_of_birth is not None:
         updates["date_of_birth"] = payload.date_of_birth
+    if payload.home_station_id is not None:
+        # 0 sau null = sterge selectia
+        if payload.home_station_id == 0:
+            updates["home_station_id"] = None
+        else:
+            exists = db.execute(
+                text("SELECT 1 FROM stations WHERE station_id = :sid AND is_active = TRUE"),
+                {"sid": payload.home_station_id},
+            ).first()
+            if not exists:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Statia cu id {payload.home_station_id} nu exista sau este inactiva",
+                )
+            updates["home_station_id"] = payload.home_station_id
 
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")

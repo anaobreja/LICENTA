@@ -10,7 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import SessionLocal, verify_schema_loaded
-from app.routers import auth, identity, tickets, users
+from app.routers import auth, crypto_keys, identity, tickets, users
+from app.routers import map as map_router
 # Lifespan: la startup verificam ca schema PostgreSQL este incarcata
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -82,6 +83,8 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(identity.router)
 app.include_router(tickets.router)
+app.include_router(map_router.router)
+app.include_router(crypto_keys.router)
 
 if __name__ == "__main__":
     import uvicorn

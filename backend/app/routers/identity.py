@@ -10,11 +10,13 @@ from fastapi.responses import FileResponse
 import qrcode
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.core.uploads import save_uploaded_image
 from app.core.security import decode_token
+from app.core.signing import sign_payload, get_key_id, decode_token_unchecked
 from app.core.roles import (
     ROLE_PASSENGER,
     ROLE_TRAIN_VERIFIER,
@@ -217,7 +219,9 @@ class CardPresentationCreateRequest(BaseModel):
 
 
 class VerifyCardPresentationRequest(BaseModel):
-    token: str = Field(min_length=10, max_length=255)
+    # min_length=9 acopera tokenul scurt nou (XXXX-XXXX = 8 chars + cratima).
+    # max_length=512 acopera offline_token semnat (~280 chars tipic).
+    token: str = Field(min_length=9, max_length=512)
 
 
 def get_db():
@@ -427,6 +431,27 @@ def _as_naive_datetime(value):
         except ValueError:
             return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
     return value
+
+
+def _iso_utc(value) -> str | None:
+    """
+    Serializeaza un datetime/string ca ISO 8601 cu sufix 'Z' (UTC explicit).
+
+    Toate timestampurile din DB sunt stocate naive in UTC (vezi schema:
+    TIMESTAMP DEFAULT CURRENT_TIMESTAMP, iar codul foloseste mereu
+    datetime.now(timezone.utc).replace(tzinfo=None) inainte de insert).
+    Cind le serializam catre client, atasam explicit 'Z' ca sa nu fie
+    interpretate ca ora locala de catre JavaScript (bug care cauza
+    bucla infinita de regenerare token QR pe pagina /present).
+
+    Returneaza None pentru input None, ca sa nu rupem schema raspunsurilor.
+    """
+    if value is None:
+        return None
+    naive = _as_naive_datetime(value)
+    if not isinstance(naive, datetime):
+        return str(value)
+    return naive.isoformat(timespec="seconds") + "Z" 
 
 
 def _insert_source_document(
@@ -1101,6 +1126,60 @@ def get_my_card(
     }
 
 
+# ============================================================================
+# Token scurt pentru introducere manuala
+# ============================================================================
+# Alfabet "fara confuzie": eliminate 0/O/1/I/l/L care se confunda la tastare.
+# 32 caractere => 32^8 = ~1.1 trilioane combinatii => coliziuni practic zero
+# pentru un set de tokens active < 10^6 simultan.
+_TOKEN_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+
+def _generate_short_token() -> str:
+    """
+    Genereaza un token de 8 caractere, format afisat XXXX-XXXX (9 chars total
+    incl. cratima). Cratima e doar pentru lizibilitate vizuala; o pastram
+    in valoarea stocata pentru a maximiza distanta dintre tokeni in DB
+    (si pentru ca utilizatorul o vede asa pe ecran).
+    """
+    raw = "".join(secrets.choice(_TOKEN_ALPHABET) for _ in range(8))
+    return f"{raw[:4]}-{raw[4:]}"
+
+
+def _insert_presentation_with_unique_token(db: Session, *, card_id: int, expires_at) -> dict:
+    """
+    Insereaza o prezentare cu token scurt unic. UNIQUE constraint-ul de pe
+    `token_value` garanteaza atomicitatea; daca apare coliziune (extrem
+    de rar), regeneram. Maxim 5 incercari ca sa nu blocam request-ul
+    pentru un bug de epuizare a entropiei.
+    """
+    last_err = None
+    for _ in range(5):
+        token = _generate_short_token()
+        try:
+            row = db.execute(
+                text(
+                    """
+                    INSERT INTO card_presentations
+                        (card_id, token_value, expires_at, status)
+                    VALUES (:card_id, :token_value, :expires_at, 'active')
+                    RETURNING id, token_value, issued_at, expires_at, status
+                    """
+                ),
+                {"card_id": card_id, "token_value": token, "expires_at": expires_at},
+            ).mappings().first()
+            db.commit()
+            return dict(row)
+        except IntegrityError as e:
+            db.rollback()
+            last_err = e
+            continue
+    raise HTTPException(
+        status_code=500,
+        detail=f"Nu am putut genera un token unic dupa 5 incercari: {last_err}",
+    )
+
+
 @router.post("/card/present")
 def present_card(
     payload: CardPresentationCreateRequest,
@@ -1134,27 +1213,76 @@ def present_card(
     if datetime.now(timezone.utc).replace(tzinfo=None) > _as_naive_datetime(card["valid_until"]):
         raise HTTPException(status_code=400, detail="Card expired")
 
-    token = f"card_{secrets.token_urlsafe(24)}"
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=payload.ttl_seconds)
 
-    row = db.execute(
+    # Token scurt (XXXX-XXXX) cu retry pe coliziune.
+    response = _insert_presentation_with_unique_token(
+        db,
+        card_id=card["id"],
+        expires_at=expires_at,
+    )
+    # ATENTIE: serializare TZ-aware obligatorie pentru countdown JS
+    # (altfel bucla infinita de regenerare - vezi _iso_utc).
+    response["issued_at"] = _iso_utc(response.get("issued_at"))
+    response["expires_at"] = _iso_utc(response.get("expires_at"))
+
+    # =========================================================================
+    # OFFLINE TOKEN: semnam un payload compact pe care controlorul il poate
+    # verifica fara conexiune la internet (vezi core/signing.py).
+    # Continutul e minim cerut pentru a afisa "VERDE" + identitatea:
+    #   - sub:    user_id (identificator stabil)
+    #   - pid:    presentation_id (pentru sincronizare la reconectare)
+    #   - card:   card_id (link catre cardul digital)
+    #   - holder: numele complet (afisat pe ecranul controlorului)
+    #   - claims: credentialele active relevante (ex. ["student_verified"])
+    #   - issuer: numele scurt al universitatii emitente (ex. "UPB")
+    #   - iat / exp: timestamps standard (verificate la signing.verify_token)
+    #   - kid:    identificatorul cheii (pentru rotire)
+    # =========================================================================
+    active_claims = db.execute(
         text(
             """
-            INSERT INTO card_presentations (card_id, token_value, expires_at, status)
-            VALUES (:card_id, :token_value, :expires_at, 'active')
-            RETURNING id, token_value, issued_at, expires_at, status
+            SELECT credential_type
+            FROM user_credentials
+            WHERE user_id = :uid
+              AND status = 'active'
+              AND (valid_until IS NULL OR valid_until > CURRENT_TIMESTAMP)
+            ORDER BY credential_type
             """
         ),
-        {
-            "card_id": card["id"],
-            "token_value": token,
-            "expires_at": expires_at,
-        },
-    ).mappings().first()
+        {"uid": current["user_id"]},
+    ).scalars().all()
 
-    db.commit()
-    response = dict(row)
-    response["qr_data_url"] = _build_qr_data_url(response["token_value"])
+    issuer_short = db.execute(
+        text(
+            """
+            SELECT u.short_name
+            FROM users usr
+            LEFT JOIN universities u ON u.university_id = usr.university_id
+            WHERE usr.user_id = :uid
+            """
+        ),
+        {"uid": current["user_id"]},
+    ).scalar()
+
+    signed_payload = {
+        "sub": current["user_id"],
+        "pid": response["id"],
+        "card": card["id"],
+        "holder": f"{current['first_name']} {current['last_name']}",
+        "claims": list(active_claims),
+        "issuer": issuer_short or "UNKNOWN",
+        "iat": response["issued_at"],
+        "exp": response["expires_at"],
+        "kid": get_key_id(),
+    }
+    response["offline_token"] = sign_payload(signed_payload)
+    response["kid"] = signed_payload["kid"]
+
+    # QR-ul afiseaza acum offline_token (poate fi verificat ambele moduri).
+    # Pastram si token_value scurt in raspuns pentru compatibilitate
+    # cu fluxul online existent + clienti vechi.
+    response["qr_data_url"] = _build_qr_data_url(response["offline_token"])
     return response
 
 
@@ -1167,8 +1295,7 @@ def issuer_pending_documents(
     current = _current_user(authorization, db)
 
     is_agent = has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
-    is_issuer = has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
-    if not is_agent and not is_issuer:
+    if not is_agent:
         raise HTTPException(status_code=403, detail="Acces interzis")
 
     # university_agent vede doar cererile universității sale
@@ -1221,8 +1348,7 @@ def university_stats(
     current = _current_user(authorization, db)
 
     is_agent = has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
-    is_issuer = has_role(current.get("role"), ROLE_UNIVERSITY_AGENT)
-    if not is_agent and not is_issuer:
+    if not is_agent:
         raise HTTPException(status_code=403, detail="Acces interzis")
 
     # Filtru universitate pentru agenti
@@ -1270,7 +1396,7 @@ def university_stats(
             COUNT(CASE WHEN d.status='rejected' THEN 1 END) AS rejected,
             COUNT(CASE WHEN d.status='pending'  THEN 1 END) AS pending
         FROM source_documents d
-        WHERE d.uploaded_at >= DATE('now', '-30 days') {univ_filter}
+        WHERE d.uploaded_at >= CURRENT_DATE - INTERVAL '30 days' {univ_filter}
         GROUP BY DATE(d.uploaded_at)
         ORDER BY day ASC
     """), params).mappings().all()
@@ -1581,21 +1707,52 @@ def train_verify(
     verifier = _current_user(authorization, db)
     _require_role(verifier, ROLE_TRAIN_VERIFIER)
 
-    pres = db.execute(
-        text(
-            """
-            SELECT cp.id, cp.card_id, cp.token_value, cp.issued_at, cp.expires_at, cp.status,
-                   cp.used_at,
-                   dc.user_id, dc.card_identifier, dc.valid_until, dc.status AS card_status,
-                   i.name AS issuer_name
-            FROM card_presentations cp
-            JOIN digital_cards dc ON dc.id = cp.card_id
-            JOIN issuers i ON i.id = dc.issuer_id
-            WHERE cp.token_value = :token_value
-            """
-        ),
-        {"token_value": payload.token},
-    ).mappings().first()
+    # Detectie format token:
+    #   - lung-semnat (offline_token, contine ".") -> decodam payload,
+    #     extragem `pid` (presentation_id) si cautam in DB dupa id;
+    #   - scurt (XXXX-XXXX, introdus manual) -> cautam direct dupa token_value.
+    incoming = (payload.token or "").strip().upper()
+
+    if "." in incoming:
+        try:
+            decoded = decode_token_unchecked(incoming)
+            pid = decoded.get("pid")
+            if not isinstance(pid, int):
+                raise ValueError("Tokenul nu contine 'pid' valid")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Token invalid: {e}")
+
+        pres = db.execute(
+            text(
+                """
+                SELECT cp.id, cp.card_id, cp.token_value, cp.issued_at, cp.expires_at, cp.status,
+                       cp.used_at,
+                       dc.user_id, dc.card_identifier, dc.valid_until, dc.status AS card_status,
+                       i.name AS issuer_name
+                FROM card_presentations cp
+                JOIN digital_cards dc ON dc.id = cp.card_id
+                JOIN issuers i ON i.id = dc.issuer_id
+                WHERE cp.id = :pid
+                """
+            ),
+            {"pid": pid},
+        ).mappings().first()
+    else:
+        pres = db.execute(
+            text(
+                """
+                SELECT cp.id, cp.card_id, cp.token_value, cp.issued_at, cp.expires_at, cp.status,
+                       cp.used_at,
+                       dc.user_id, dc.card_identifier, dc.valid_until, dc.status AS card_status,
+                       i.name AS issuer_name
+                FROM card_presentations cp
+                JOIN digital_cards dc ON dc.id = cp.card_id
+                JOIN issuers i ON i.id = dc.issuer_id
+                WHERE cp.token_value = :token_value
+                """
+            ),
+            {"token_value": incoming},
+        ).mappings().first()
 
     if not pres:
         raise HTTPException(status_code=404, detail="Card presentation not found")

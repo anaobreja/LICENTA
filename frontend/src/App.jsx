@@ -17,6 +17,7 @@ import BuyTicket from './pages/BuyTicket'
 import MyTickets from './pages/MyTickets'
 import TravelHistory from './pages/TravelHistory'
 import ValidateTicket from './pages/ValidateTicket'
+import MapView from './pages/MapView'
 
 // Components
 import ProtectedRoute from './components/ProtectedRoute'
@@ -66,6 +67,11 @@ function App() {
     setUser(null)
     setIsAuthenticated(false)
     localStorage.removeItem('access_token')
+  }
+
+  const handleUserUpdate = (updatedUser) => {
+    // Actualizeaza state-ul global cand user-ul isi modifica profilul / poza
+    setUser(prev => ({ ...prev, ...updatedUser }))
   }
 
   const handleThemeChange = (nextTheme) => {
@@ -180,10 +186,19 @@ function App() {
           />
 
           <Route
+            path="/map"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated} user={user}>
+                <MapView />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/profile"
             element={
               <ProtectedRoute isAuthenticated={isAuthenticated} user={user}>
-                <Profile user={user} onAccountDeleted={handleLogout} />
+                <Profile user={user} onAccountDeleted={handleLogout} onUserUpdate={handleUserUpdate} />
               </ProtectedRoute>
             }
           />

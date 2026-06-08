@@ -15,6 +15,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
 *.so
 .Python
 build/
@@ -79,3 +80,39 @@ logs/
 # Misc local helpers
 _run_tests.bat
 _tests.log
+_be.log
+_*.py
+_*.log
+
+# Test coverage artifacts
+.coverage
+htmlcov/
+coverage.xml
+
+# Junk files from accidental shell commands
+0)
+FAIL
+
+# Local exploratory scripts (not part of the application)
+check_*.py
+compare*.py
+count.py
+deep_*.py
+definitive.py
+diag_*.py
+direct.py
+final_*.py
+find_*.py
+hyphen_*.py
+recount.py
+search_*.py
+side_by_side.py
+strict.py
+verify_*.py
+prenume_diff.txt
+
+# Chei de semnare (NU committed niciodata)
+backend/keys/
+backend/keys/*.pem
+keys/
+keys/*.pem

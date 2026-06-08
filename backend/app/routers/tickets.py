@@ -70,34 +70,416 @@ class ValidateTicketResponse(BaseModel):
     passenger_name: Optional[str] = None
     ticket_type: Optional[str] = None
     valid_until: Optional[str] = None
-# Pricing & discount logic
-BASE_PRICE_BY_TYPE = {
-    "single": 50.00,
-    "return": 90.00,
-}
-STUDENT_DISCOUNT_PERCENT = 50.0
+# ============================================================================
+# Pricing — lookup in tabela tariff_brackets (modeleaza Tariful 100 CFR)
+# ============================================================================
+# Reducere conform OUG 11/2024 + Legea 245/2024:
+#  - studenti < 30 ani, clasa II, transport feroviar intern, numar nelimitat
+STUDENT_DISCOUNT_PERCENT = 90.0
+# Doctoranzi conform HG 845/2009 (forma cu frecventa)
+DOCTORAL_DISCOUNT_PERCENT = 50.0
+# Bilet dus-intors = 2x tariful single (CFR nu ofera reducere pe return)
+RETURN_MULTIPLIER = 2.0
 
-def _compute_price(db: Session, user_id: int, ticket_type: str) -> tuple[float, float]:
-    """Returns (price_after_discount, discount_percent_applied)."""
-    base = BASE_PRICE_BY_TYPE.get(ticket_type, 50.00)
-    # Reducere automata 50% pentru student activ
-    has_student = db.execute(
+
+def _lookup_base_price(
+    db: Session, distance_km: float, train_category: str, train_class: int = 2
+) -> float:
+    """
+    Lookup in tariff_brackets pentru tariful clasa indicata.
+    Returneaza tariful single-trip ca float RON.
+    """
+    # Normalizam categoria: schema accepta 'R'/'IR'/'IC'/'IR-N'
+    cat_map = {
+        "regio": "R", "r": "R",
+        "interregio": "IR", "ir": "IR",
+        "intercity": "IC", "ic": "IC",
+        "express": "IR", "high_speed": "IC",
+    }
+    cat = cat_map.get((train_category or "IR").lower(), "IR")
+
+    row = db.execute(
         text(
             """
-            SELECT 1 FROM user_credentials
+            SELECT price_ron
+            FROM tariff_brackets
+            WHERE train_category = :cat
+              AND train_class    = :cls
+              AND km_from <= :km AND km_to >= :km
+              AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
+            LIMIT 1
+            """
+        ),
+        {"cat": cat, "cls": train_class, "km": int(distance_km)},
+    ).first()
+
+    if row:
+        return float(row[0])
+
+    # Fallback: daca nu gasim bracket, formula liniara
+    base = 17 + distance_km * 0.17
+    if cat == "IR":
+        base += 15 + distance_km * 0.025
+    elif cat == "IC":
+        base += 25 + distance_km * 0.04
+    if train_class == 1:
+        base *= 1.35
+    return round(base, 2)
+
+
+def _user_discount(db: Session, user_id: int) -> float:
+    """
+    Returneaza discountul aplicabil (in procente) pentru user.
+    Prioritizeaza student_verified > doctoral > 0.
+    """
+    cred_row = db.execute(
+        text(
+            """
+            SELECT credential_type FROM user_credentials
             WHERE user_id = :uid
-              AND credential_type = 'student'
               AND status = 'active'
               AND valid_until > CURRENT_TIMESTAMP
+              AND credential_type IN ('student', 'student_verified', 'doctoral_verified', 'pupil', 'elev_verified')
+            ORDER BY
+              CASE credential_type
+                WHEN 'student_verified'   THEN 1
+                WHEN 'student'            THEN 2
+                WHEN 'elev_verified'      THEN 3
+                WHEN 'pupil'              THEN 4
+                WHEN 'doctoral_verified'  THEN 5
+              END
             LIMIT 1
             """
         ),
         {"uid": user_id},
     ).first()
-    if has_student:
-        return round(base * (1 - STUDENT_DISCOUNT_PERCENT / 100), 2), STUDENT_DISCOUNT_PERCENT
-    return base, 0.0
+
+    if not cred_row:
+        return 0.0
+
+    cred_type = cred_row[0]
+    if cred_type in ("student", "student_verified", "elev_verified", "pupil"):
+        return STUDENT_DISCOUNT_PERCENT
+    if cred_type == "doctoral_verified":
+        return DOCTORAL_DISCOUNT_PERCENT
+    return 0.0
+
+
+def _personal_route_status(
+    db: Session,
+    user_id: int,
+    dep_station_id: int,
+    arr_station_id: int,
+) -> dict:
+    """
+    Verifica daca (dep, arr) coincide cu ruta personala a studentului,
+    definita ca perechea (home_station, university.main_station) — in
+    orice sens (dus sau intors).
+
+    Conform OUG 11/2024, reducerea de 90% pentru studenti se aplica pe
+    "transportul intern feroviar intre localitatea de domiciliu si cea
+    a institutiei de invatamint". Implementam asta verificand statiile
+    declarate de utilizator.
+
+    Returneaza un dict cu cheile:
+        is_personal_route: bool   — True daca perechea match-uieste
+        reason: str               — motiv lizibil pentru UI
+        home_station_id: int|None — pentru afisare/debug
+        university_station_id: int|None
+    """
+    row = db.execute(
+        text(
+            """
+            SELECT
+                u.home_station_id,
+                un.main_station_id AS university_station_id,
+                hs.name AS home_station_name,
+                us.name AS university_station_name
+            FROM users u
+            LEFT JOIN universities un ON un.university_id = u.university_id
+            LEFT JOIN stations hs ON hs.station_id = u.home_station_id
+            LEFT JOIN stations us ON us.station_id = un.main_station_id
+            WHERE u.user_id = :uid
+            """
+        ),
+        {"uid": user_id},
+    ).mappings().first()
+
+    if not row:
+        return {
+            "is_personal_route": False,
+            "reason": "Utilizator inexistent",
+            "home_station_id": None,
+            "university_station_id": None,
+        }
+
+    home_id = row["home_station_id"]
+    uni_id = row["university_station_id"]
+
+    if home_id is None:
+        return {
+            "is_personal_route": False,
+            "reason": "Statia de domiciliu nu este declarata. Adaug-o din profil pentru a beneficia de reducere.",
+            "home_station_id": None,
+            "university_station_id": uni_id,
+        }
+
+    if uni_id is None:
+        return {
+            "is_personal_route": False,
+            "reason": "Centrul universitar nu are statie principala asociata. Contacteaza agentul universitar.",
+            "home_station_id": home_id,
+            "university_station_id": None,
+        }
+
+    pair = {dep_station_id, arr_station_id}
+    expected = {home_id, uni_id}
+
+    if pair == expected:
+        return {
+            "is_personal_route": True,
+            "reason": f"Ruta personala ({row['home_station_name']} <-> {row['university_station_name']}). Reducerea de student se aplica.",
+            "home_station_id": home_id,
+            "university_station_id": uni_id,
+        }
+
+    return {
+        "is_personal_route": False,
+        "reason": f"Ruta nu corespunde traseului tau personal ({row['home_station_name']} <-> {row['university_station_name']}). Tarif intreg conform OUG 11/2024.",
+        "home_station_id": home_id,
+        "university_station_id": uni_id,
+    }
+
+
+def _compute_price(
+    db: Session,
+    user_id: int,
+    ticket_type: str,
+    train_id: int,
+    departure_station_id: int,
+    arrival_station_id: int,
+    train_class: int = 2,
+) -> tuple[float, float, float, float, dict]:
+    """
+    Returns (final_price, discount_percent, base_price_single, distance_km,
+             route_status).
+
+    Distanta = diferenta de distance_from_origin_km intre stop-ul de plecare
+    si stop-ul de sosire pe ruta trenului (din tabela route_stops).
+    Daca pasagerul cere o relatie pe care trenul nu o acopera, fallback la
+    total_distance_km pentru a nu bloca cumpararea.
+
+    Discountul de student se aplica DOAR daca ruta cumparata coincide cu
+    ruta personala a utilizatorului (home_station <-> main_station al
+    universitatii), conform OUG 11/2024. Pe alte rute se aplica tariful
+    intreg, indiferent de credentialele utilizatorului.
+    """
+    train_row = db.execute(
+        text(
+            """
+            SELECT t.train_id, t.train_type, t.route_id, r.total_distance_km
+            FROM trains t
+            JOIN routes r ON r.route_id = t.route_id
+            WHERE t.train_id = :tid
+            """
+        ),
+        {"tid": train_id},
+    ).first()
+    if not train_row:
+        raise HTTPException(status_code=404, detail="Trenul nu exista")
+
+    _, train_type, route_id, total_km = train_row
+
+    # Distanta efectiva intre cele doua statii pe ruta trenului
+    seg = db.execute(
+        text(
+            """
+            SELECT
+                MIN(CASE WHEN station_id = :dep THEN distance_from_origin_km END) AS dep_km,
+                MIN(CASE WHEN station_id = :arr THEN distance_from_origin_km END) AS arr_km,
+                MIN(CASE WHEN station_id = :dep THEN stop_order END) AS dep_order,
+                MIN(CASE WHEN station_id = :arr THEN stop_order END) AS arr_order
+            FROM route_stops
+            WHERE route_id = :rid AND station_id IN (:dep, :arr)
+            """
+        ),
+        {"rid": route_id, "dep": departure_station_id, "arr": arrival_station_id},
+    ).first()
+
+    if seg and seg.dep_km is not None and seg.arr_km is not None:
+        distance_km = abs(float(seg.arr_km) - float(seg.dep_km))
+        if distance_km < 1:
+            distance_km = float(total_km or 50.0)
+    else:
+        distance_km = float(total_km or 50.0)
+
+    base_single = _lookup_base_price(db, distance_km, train_type, train_class)
+    multiplier = RETURN_MULTIPLIER if ticket_type == "return" else 1.0
+    base_total = round(base_single * multiplier, 2)
+
+    # Discountul de utilizator (student / doctorand) se aplica DOAR pe ruta
+    # personala declarata. Pe alte rute -> tarif intreg.
+    route_status = _personal_route_status(
+        db, user_id, departure_station_id, arrival_station_id
+    )
+    if route_status["is_personal_route"]:
+        discount = _user_discount(db, user_id)
+    else:
+        discount = 0.0
+
+    final_price = round(base_total * (1 - discount / 100), 2)
+
+    return final_price, discount, base_total, distance_km, route_status
 # Endpoints
+
+
+@router.get("/stations/search")
+def search_stations(
+    q: str = "",
+    limit: int = 15,
+    db: Session = Depends(get_db),
+):
+    """
+    Autocomplete pentru statii.
+    Query: name sau city ILIKE '%q%'. Sortare: nume, alfabetic.
+    """
+    q = (q or "").strip()
+    if len(q) < 2:
+        # returnez statii populare (cele mai multe trenuri trecand prin ele)
+        rows = db.execute(
+            text(
+                """
+                SELECT s.station_id, s.name, s.city, s.code, COUNT(rs.route_stop_id) AS popularity
+                FROM stations s
+                LEFT JOIN route_stops rs ON rs.station_id = s.station_id
+                WHERE s.is_active = TRUE
+                GROUP BY s.station_id
+                ORDER BY popularity DESC, s.name ASC
+                LIMIT :lim
+                """
+            ),
+            {"lim": limit},
+        ).mappings().all()
+    else:
+        like = f"%{q}%"
+        rows = db.execute(
+            text(
+                """
+                SELECT s.station_id, s.name, s.city, s.code, COUNT(rs.route_stop_id) AS popularity
+                FROM stations s
+                LEFT JOIN route_stops rs ON rs.station_id = s.station_id
+                WHERE s.is_active = TRUE
+                  AND (unaccent(s.name) ILIKE unaccent(:q) OR unaccent(s.city) ILIKE unaccent(:q) OR s.code ILIKE :q)
+                GROUP BY s.station_id
+                ORDER BY popularity DESC, s.name ASC
+                LIMIT :lim
+                """
+            ),
+            {"q": like, "lim": limit},
+        ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+@router.get("/trains/search")
+def search_trains(
+    from_station_id: int,
+    to_station_id: int,
+    travel_date: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Cauta trenurile care leaga 2 statii pe acelasi tren (directe).
+    Conditia: ambele statii sunt opriri pe aceeasi ruta, ordinea corecta.
+    """
+    if from_station_id == to_station_id:
+        raise HTTPException(status_code=400, detail="Statiile trebuie sa fie diferite")
+
+    # NOTA: route_stops poate contine stop-uri duplicate pe aceeasi ruta
+    # (anomalie a datelor CFR — ~2100 rinduri redundante in importul oficial,
+    # ex. ruta 612 are "Bucuresti Nord Gr.A" atit pe stop 54 cit si pe 55).
+    # Folosim DISTINCT ON (train_id) ca sa intoarcem fiecare tren o singura
+    # data, pastrand cea mai timpurie pereche (rs_from, rs_to).
+    # PostgreSQL cere ca ORDER BY sa inceapa cu cheia de DISTINCT, asa ca
+    # facem sortarea finala dupa departure_time in Python.
+    raw_rows = db.execute(
+        text(
+            """
+            SELECT DISTINCT ON (t.train_id)
+                t.train_id, t.train_number, t.train_type,
+                op.name AS operator_name, op.code AS operator_code,
+                r.route_id, r.route_name,
+                s_from.station_id AS from_id, s_from.name AS from_name, s_from.code AS from_code,
+                s_to.station_id   AS to_id,   s_to.name   AS to_name,   s_to.code   AS to_code,
+                rs_from.stop_order AS from_order,
+                rs_to.stop_order   AS to_order,
+                rs_from.departure_time AS departure_time,
+                rs_to.arrival_time     AS arrival_time,
+                (rs_to.distance_from_origin_km - rs_from.distance_from_origin_km) AS distance_km
+            FROM trains t
+            JOIN routes r          ON r.route_id = t.route_id
+            JOIN railway_operators op ON op.operator_id = t.operator_id
+            JOIN route_stops rs_from ON rs_from.route_id = r.route_id AND rs_from.station_id = :from_id
+            JOIN route_stops rs_to   ON rs_to.route_id   = r.route_id AND rs_to.station_id   = :to_id
+            JOIN stations s_from ON s_from.station_id = rs_from.station_id
+            JOIN stations s_to   ON s_to.station_id   = rs_to.station_id
+            WHERE t.is_active = TRUE
+              AND rs_from.stop_order < rs_to.stop_order
+            ORDER BY t.train_id, rs_from.stop_order, rs_to.stop_order
+            """
+        ),
+        {"from_id": from_station_id, "to_id": to_station_id},
+    ).mappings().all()
+
+    from datetime import time as _time
+    rows = sorted(
+        raw_rows,
+        key=lambda r: (r["departure_time"] or _time.max, r["train_number"] or ""),
+    )[:50]
+
+    return [
+        {
+            **dict(r),
+            "departure_time": str(r["departure_time"]) if r["departure_time"] else None,
+            "arrival_time": str(r["arrival_time"]) if r["arrival_time"] else None,
+            "distance_km": float(r["distance_km"]) if r["distance_km"] else None,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/tickets/quote")
+def quote_ticket(
+    payload: BuyTicketRequest,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Calculeaza pretul biletului FARA a-l cumpara.
+    Foloseste tariff_brackets + discountul utilizatorului curent.
+    Util pentru UI: arata pretul inainte de confirmare.
+    """
+    user = _extract_user_from_token(authorization, db)
+    price, discount, base_price, distance_km, route_status = _compute_price(
+        db,
+        user["user_id"],
+        payload.ticket_type,
+        payload.train_id,
+        payload.departure_station_id,
+        payload.arrival_station_id,
+    )
+    return {
+        "base_price": base_price,
+        "discount_percent": discount,
+        "final_price": price,
+        "distance_km": distance_km,
+        "ticket_type": payload.ticket_type,
+        "savings": round(base_price - price, 2),
+        "is_personal_route": route_status["is_personal_route"],
+        "route_reason": route_status["reason"],
+        "home_station_id": route_status["home_station_id"],
+        "university_station_id": route_status["university_station_id"],
+    }
+
 @router.get("/tickets/catalog")
 def list_catalog(db: Session = Depends(get_db)):
     """Listeaza rute + trenuri disponibile pentru cumparare."""
@@ -154,7 +536,14 @@ def buy_ticket(
     if not train:
         raise HTTPException(status_code=404, detail="Trenul nu exista sau este inactiv")
 
-    price, discount = _compute_price(db, user["user_id"], payload.ticket_type)
+    price, discount, base_price, distance_km, route_status = _compute_price(
+        db,
+        user["user_id"],
+        payload.ticket_type,
+        payload.train_id,
+        payload.departure_station_id,
+        payload.arrival_station_id,
+    )
 
     try:
         # 1. Insereaza biletul
@@ -238,8 +627,13 @@ def buy_ticket(
             "travel_date": str(ticket["travel_date"]),
             "price": float(ticket["price"]),
             "discount_applied": discount,
+            "is_personal_route": route_status["is_personal_route"],
+            "route_reason": route_status["reason"],
             "qr_token": qr["token_value"],
-            "qr_expires_at": str(qr["expires_at"]),
+            "qr_expires_at": (
+                qr["expires_at"].isoformat(timespec="seconds") + "Z"
+                if qr.get("expires_at") else None
+            ),
             "message": "Bilet cumparat cu succes. Prezinta QR-ul controlorului.",
         }
     except HTTPException:

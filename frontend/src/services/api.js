@@ -2,7 +2,9 @@
  * API Service - Handles all backend communication
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+// Compatibilitate cu medii non-Vite (Node test runners) — in productie
+// `import.meta.env` este injectat de Vite la build time.
+const API_BASE_URL = (import.meta.env && import.meta.env.VITE_API_URL) || '/api'
 
 // Helper function to get authorization header
 const getAuthHeader = () => {
@@ -101,13 +103,34 @@ export const register = async ({
 
   const response = await fetch(url, { method: 'POST', body: formData })
   if (!response.ok) {
-    let errorMessage = `HTTP ${response.status}`
+    let errorMessage = `Eroare ${response.status}`
     try {
       const errorData = await response.json()
       if (errorData?.detail) {
-        errorMessage = typeof errorData.detail === 'string'
-          ? errorData.detail
-          : JSON.stringify(errorData.detail)
+        if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail
+        } else if (Array.isArray(errorData.detail)) {
+          // Pydantic 422 — formatez fiecare eroare ca "Camp: mesaj"
+          const fieldLabels = {
+            email: 'Email', password: 'Parola', phone: 'Telefon',
+            first_name: 'Prenume', last_name: 'Nume',
+            university_name: 'Universitate',
+          }
+          errorMessage = errorData.detail.map(err => {
+            const field = err.loc?.[err.loc.length - 1] || ''
+            const label = fieldLabels[field] || field
+            const msg = err.msg || 'Valoare invalida'
+            // Traducere mesaje uzuale
+            const friendly = msg
+              .replace(/String should have at least (\d+) characters/, 'minim $1 caractere')
+              .replace(/String should have at most (\d+) characters/, 'maxim $1 caractere')
+              .replace(/value is not a valid email address.*/, 'email invalid')
+              .replace(/field required/i, 'camp obligatoriu')
+            return label ? `${label}: ${friendly}` : friendly
+          }).join('. ')
+        } else {
+          errorMessage = JSON.stringify(errorData.detail)
+        }
       }
     } catch (_) { /* ignore */ }
     throw new Error(errorMessage)
@@ -205,6 +228,7 @@ export const submitIdentityValidationRequest = async ({
   ci_name = '',
   ci_date_of_birth = '',
   ci_sex = '',
+  ci_address = '',
 }) => {
   const url = `${API_BASE_URL}/documents/validation-request`
   const formData = new FormData()
@@ -225,6 +249,7 @@ export const submitIdentityValidationRequest = async ({
   formData.append('ci_name', ci_name)
   formData.append('ci_date_of_birth', ci_date_of_birth)
   formData.append('ci_sex', ci_sex)
+  formData.append('ci_address', ci_address || '')
 
   const response = await fetch(url, {
     method: 'POST',
@@ -309,6 +334,176 @@ export const verifyPresentation = (payload) =>
     method: 'POST',
     body: JSON.stringify(payload)
   })
+
+// =============================================================================
+// Verificare OFFLINE a tokenurilor de prezentare (semnatura Ed25519)
+// =============================================================================
+//
+// Algoritmul Ed25519 are urmatoarele caracteristici critice pentru cazul nostru:
+//   - cheia publica = 32 bytes (importabila ca 'raw' in Web Crypto API)
+//   - semnatura = 64 bytes
+//   - verificarea = O(1), <1ms pe hardware modern
+//
+// Cheia publica e descarcata o singura data de la /verification-key si
+// pastrata in localStorage cu TTL 24h. Daca server-ul roteste cheia (kid
+// diferit), refacem fetch-ul si invalidam cache-ul.
+//
+// IMPORTANT: nu cache-uim cheia privata; aceasta sta DOAR pe server.
+// =============================================================================
+
+const VERIFICATION_KEY_CACHE_KEY = 'rdc_verification_key_v1'
+const VERIFICATION_KEY_TTL_MS = 24 * 60 * 60 * 1000  // 24h
+
+/**
+ * Descarca cheia publica Ed25519 de la /verification-key.
+ * Cache-uieste in localStorage. Forteaza refresh daca:
+ *   - cache lipsa
+ *   - TTL expirat
+ *   - param `force=true`
+ *
+ * Returneaza { algorithm, kid, pem, raw_base64, fetched_at }.
+ */
+export const getVerificationKey = async ({ force = false } = {}) => {
+  if (!force) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(VERIFICATION_KEY_CACHE_KEY))
+      if (cached?.fetched_at && Date.now() - cached.fetched_at < VERIFICATION_KEY_TTL_MS) {
+        return cached
+      }
+    } catch (_) {
+      // cache corupt - reimprospatam
+    }
+  }
+  const data = await apiCall('/verification-key')
+  const enriched = { ...data, fetched_at: Date.now() }
+  try {
+    localStorage.setItem(VERIFICATION_KEY_CACHE_KEY, JSON.stringify(enriched))
+  } catch (_) {
+    // localStorage plin / dezactivat - continuam fara cache
+  }
+  return enriched
+}
+
+/**
+ * Sterge cache-ul cheii publice. Util la logout sau cand utilizatorul
+ * raporteaza "verificarea nu mai merge".
+ */
+export const clearVerificationKeyCache = () => {
+  try {
+    localStorage.removeItem(VERIFICATION_KEY_CACHE_KEY)
+  } catch (_) { /* ignore */ }
+}
+
+// Helpers base64url (compatibili cu signing.py de pe server)
+const b64urlToBytes = (s) => {
+  const padded = s + '='.repeat((-s.length) & 3)
+  const std = padded.replace(/-/g, '+').replace(/_/g, '/')
+  const bin = atob(std)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return bytes
+}
+
+const b64stdToBytes = (s) => {
+  const bin = atob(s)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return bytes
+}
+
+/**
+ * Verifica OFFLINE un token semnat de server.
+ * Format token: "<b64url_payload>.<b64url_signature>"
+ *
+ * Returneaza un obiect:
+ *   { valid: true, payload: {...} }  daca semnatura e valida si exp > now
+ *   { valid: false, reason: '...' }  altfel (motive lizibile pentru UI)
+ *
+ * NU arunca exceptii pentru erori de validare - controlorul vrea un raspuns
+ * binar clar verde/rosu, nu un stack trace.
+ */
+export const verifyOfflineToken = async (token) => {
+  if (typeof token !== 'string' || token.indexOf('.') === -1) {
+    return { valid: false, reason: 'Format token invalid (lipseste separatorul ".")' }
+  }
+  const parts = token.split('.')
+  if (parts.length !== 2) {
+    return { valid: false, reason: 'Format token invalid (asteptat 2 segmente)' }
+  }
+
+  let canonical, signature
+  try {
+    canonical = b64urlToBytes(parts[0])
+    signature = b64urlToBytes(parts[1])
+  } catch (e) {
+    return { valid: false, reason: 'Token corupt (base64 invalid)' }
+  }
+  if (signature.length !== 64) {
+    return { valid: false, reason: `Semnatura asteptata 64 bytes, primita ${signature.length}` }
+  }
+
+  let pubKey
+  try {
+    const keyData = await getVerificationKey()
+    const rawKey = b64stdToBytes(keyData.raw_base64)
+    if (rawKey.length !== 32) {
+      return { valid: false, reason: `Cheie publica invalida: ${rawKey.length} bytes` }
+    }
+    if (!window.crypto?.subtle?.importKey) {
+      return { valid: false, reason: 'Web Crypto API indisponibil in acest browser' }
+    }
+    pubKey = await window.crypto.subtle.importKey(
+      'raw',
+      rawKey,
+      { name: 'Ed25519' },
+      false,
+      ['verify']
+    )
+  } catch (e) {
+    return { valid: false, reason: `Eroare la incarcarea cheii publice: ${e.message || e}` }
+  }
+
+  let signatureValid = false
+  try {
+    signatureValid = await window.crypto.subtle.verify(
+      { name: 'Ed25519' },
+      pubKey,
+      signature,
+      canonical
+    )
+  } catch (e) {
+    return { valid: false, reason: `Verificare esuata: ${e.message || e}` }
+  }
+  if (!signatureValid) {
+    return { valid: false, reason: 'Semnatura invalida - tokenul a fost modificat sau emis de alta cheie' }
+  }
+
+  let payload
+  try {
+    payload = JSON.parse(new TextDecoder().decode(canonical))
+  } catch (e) {
+    return { valid: false, reason: 'Payload JSON invalid' }
+  }
+
+  if (!payload.exp) {
+    return { valid: false, reason: 'Payload lipseste campul "exp"' }
+  }
+  const expRaw = String(payload.exp)
+  const hasTimezone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(expRaw)
+  const expMs = new Date(hasTimezone ? expRaw : expRaw + 'Z').getTime()
+  if (!Number.isFinite(expMs)) {
+    return { valid: false, reason: `Camp "exp" nu este timestamp valid: ${expRaw}` }
+  }
+  if (Date.now() > expMs) {
+    return {
+      valid: false,
+      reason: `Token expirat la ${new Date(expMs).toLocaleString('ro-RO')}`,
+      payload,
+    }
+  }
+
+  return { valid: true, payload }
+}
 
 // User
 export const getUserProfile = () =>
@@ -400,3 +595,56 @@ export const validateTicketToken = (token, deviceId = null, locationName = null)
 
 export const getValidationsHistory = (limit = 50) =>
   apiCall(`/validations/history?limit=${limit}`)
+
+export const quoteTicket = ({
+  train_id,
+  departure_station_id,
+  arrival_station_id,
+  travel_date,
+  ticket_type = 'single',
+}) =>
+  apiCall('/tickets/quote', {
+    method: 'POST',
+    body: JSON.stringify({
+      train_id,
+      departure_station_id,
+      arrival_station_id,
+      travel_date,
+      ticket_type,
+    }),
+  })
+
+export const searchStations = (q = '', limit = 15) =>
+  apiCall(`/stations/search?q=${encodeURIComponent(q)}&limit=${limit}`)
+
+export const searchTrains = (fromStationId, toStationId, travelDate = null) => {
+  const qs = new URLSearchParams({
+    from_station_id: String(fromStationId),
+    to_station_id: String(toStationId),
+  })
+  if (travelDate) qs.set('travel_date', travelDate)
+  return apiCall(`/trains/search?${qs.toString()}`)
+}
+
+// Map endpoints
+export const getMapStations = ({ only_university = false, operator_id = null } = {}) => {
+  const qs = new URLSearchParams()
+  if (only_university) qs.set('only_university', 'true')
+  if (operator_id) qs.set('operator_id', String(operator_id))
+  const q = qs.toString()
+  return apiCall(`/map/stations${q ? '?' + q : ''}`)
+}
+
+export const getMapConnections = ({ min_trains = 1, only_university = true, operator_id = null } = {}) => {
+  const qs = new URLSearchParams({
+    min_trains: String(min_trains),
+    only_university: String(only_university),
+  })
+  if (operator_id) qs.set('operator_id', String(operator_id))
+  return apiCall(`/map/connections?${qs.toString()}`)
+}
+
+export const getMapOperators = () => apiCall('/map/operators')
+
+export const simulateTrainPosition = (trainId) =>
+  apiCall(`/map/train-simulate/${trainId}`)

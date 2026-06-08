@@ -12,14 +12,6 @@ function Login({ onLogin }) {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
-  const demoAccounts = [
-    { label: 'USER (pasager)',           email: 'user.demo@railwaydemo.com' },
-    { label: 'AGENT (train verifier)',   email: 'agent.train@railwaydemo.com' },
-    { label: 'AGENT (universitar UPB)',    email: 'agent.upb@railwaydemo.com' },
-    { label: 'AGENT (universitar ASE)',    email: 'agent.ase@railwaydemo.com' },
-    { label: 'AGENT (universitar UNIBUC)', email: 'agent.unibuc@railwaydemo.com' },
-  ]
-
   const getRouteForRole = (role) => {
     if (role === 'train_verifier')   return '/verify'
     if (role === 'university_agent') return '/agent'
@@ -52,14 +44,6 @@ function Login({ onLogin }) {
     } finally {
       setLoading(false)
     }
-  }
-
-  const useDemoAccount = (accountEmail) => {
-    setEmail(accountEmail)
-    setPassword('demo')
-    setTotpCode('')
-    setNeedsMfa(false)
-    setError('')
   }
 
   return (
@@ -163,23 +147,6 @@ function Login({ onLogin }) {
             </Link>
           </div>
 
-          <div className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm dark:bg-slate-950 dark:border-slate-800">
-            <p className="font-bold text-slate-800 mb-2 dark:text-slate-100">Demo accounts</p>
-            <div className="space-y-2">
-              {demoAccounts.map((account) => (
-                <button
-                  key={account.email}
-                  type="button"
-                  onClick={() => useDemoAccount(account.email)}
-                  className="w-full text-left px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-cyan-50 hover:border-cyan-200 transition dark:bg-slate-900 dark:border-slate-800 dark:hover:bg-slate-800"
-                >
-                  <div className="font-semibold text-slate-800 dark:text-slate-100">{account.label}</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">{account.email}</div>
-                </button>
-              ))}
-            </div>
-            <p className="text-slate-500 mt-3 dark:text-slate-400">Parola demo: demo</p>
-          </div>
         </div>
       </div>
     </div>

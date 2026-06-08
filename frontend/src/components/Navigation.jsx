@@ -70,6 +70,7 @@ function Navigation({ user, onLogout }) {
               <Link to="/credentials" className="hover:text-blue-200">Credentiale</Link>
               <Link to="/present" className="hover:text-blue-200">Card Digital</Link>
               <Link to="/tickets" className="hover:text-blue-200">Bilete</Link>
+              <Link to="/map" className="hover:text-blue-200">Hartă</Link>
               <Link to="/travel-history" className="hover:text-blue-200">Istoric calatorii</Link>
             </>
           )}
@@ -77,13 +78,17 @@ function Navigation({ user, onLogout }) {
           {user?.role === 'train_verifier' && (
             <>
               <Link to="/verify" className="hover:text-blue-200">Verificare card digital</Link>
+              <Link to="/map" className="hover:text-blue-200">Hartă</Link>
               <Link to="/validate-ticket" className="hover:text-blue-200">Validare bilet</Link>
               <Link to="/travel-history" className="hover:text-blue-200">Istoric</Link>
             </>
           )}
 
           {user?.role === 'university_agent' && (
-            <Link to="/agent" className="hover:text-blue-200">Dashboard Agent</Link>
+            <>
+              <Link to="/agent" className="hover:text-blue-200">Dashboard Agent</Link>
+              <Link to="/map" className="hover:text-blue-200">Hartă</Link>
+            </>
           )}
 
           <div className="flex gap-3 items-center ml-2 pl-0 md:ml-4 md:pl-4 md:border-l border-blue-400 dark:border-slate-700">

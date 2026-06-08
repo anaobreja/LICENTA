@@ -108,8 +108,17 @@ class TestBuyTicket:
         resp = _buy_ticket(client, train_verifier_token, train)
         assert resp.status_code == 403, "Conductorul nu trebuie sa poata cumpara bilete"
 
-    def test_student_gets_discount(self, client):
-        """user.demo are credential student activ — verificam discount 50%."""
+    def test_student_gets_no_discount_off_personal_route(self, client):
+        """
+        user.demo are credential student activ. Conform OUG 11/2024, reducerea
+        de 90% se aplica DOAR pe ruta personala (home_station <-> statia
+        universitatii). Pe alte rute -> tarif intreg.
+
+        user.demo NU are home_station setat in seed -> nu primeste discount,
+        oricare ar fi trenul cumparat. Asta este comportamentul corect post-fix.
+        Scenariile detaliate (cu home_station setat, ambele directii, alte
+        rute, etc.) traiesc in test_personal_route.py.
+        """
         login = client.post(
             "/auth/login",
             json={"email": "user.demo@railwaydemo.com", "password": "demo2026"},
@@ -120,9 +129,15 @@ class TestBuyTicket:
         train = _get_first_train(client)
         resp = _buy_ticket(client, token, train)
         assert resp.status_code == 200, resp.text
-        assert resp.json()["discount_applied"] == 50.0, (
-            "Student cu credential activ trebuie sa primeasca 50% discount"
+        body = resp.json()
+
+        assert body["discount_applied"] == 0, (
+            "Fara home_station declarata, studentul plateste tariful intreg. "
+            "Reducerea OUG 11/2024 se aplica doar pe ruta personala."
         )
+        assert body["is_personal_route"] is False
+        assert "domiciliu" in body["route_reason"].lower() \
+            or "declarata" in body["route_reason"].lower()
 
 class TestListMyTickets:
 
