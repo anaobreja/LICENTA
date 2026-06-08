@@ -259,7 +259,21 @@ def update_me(
     if payload.phone is not None:
         updates["phone"] = payload.phone
     if payload.date_of_birth is not None:
-        updates["date_of_birth"] = payload.date_of_birth
+        # Parsam la date object Python ca sa evitam ambiguitati de bind type.
+        # Acceptam atat 'YYYY-MM-DD' cat si 'YYYY-MM-DDTHH:MM:SS' (timestamp ISO).
+        from datetime import date, datetime
+        raw = payload.date_of_birth.strip()
+        try:
+            if "T" in raw:
+                parsed = datetime.fromisoformat(raw).date()
+            else:
+                parsed = date.fromisoformat(raw)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"date_of_birth format invalid: {raw!r}. Use YYYY-MM-DD.",
+            )
+        updates["date_of_birth"] = parsed
     if payload.home_station_id is not None:
         # 0 sau null = sterge selectia
         if payload.home_station_id == 0:
