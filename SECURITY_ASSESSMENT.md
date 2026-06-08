@@ -682,6 +682,68 @@ def export_me(...):
 
 ---
 
+## 4.1 Identity Data Immutability (NEW)
+
+### Strengths
+
+#### Frozen Fields After Verification (STRONG)
+
+Once a user's identity is validated by a university agent, the following
+fields become immutable until the credential expires (start of the next
+academic year, October 1st):
+
+- `cnp` (national ID number)
+- `first_name`, `last_name`
+- `birth_date`
+- `home_station_id` (derived from validated home address)
+
+**Implementation:** `app/core/identity_status.py` provides
+`is_identity_verified()` and `check_frozen_field_changes()`. The router
+`update_me` in `users.py` raises HTTP 403 with detailed error if a
+verified user attempts to modify any frozen field. The endpoint
+`GET /users/me/verification-status` exposes expiry information to the
+frontend so the UI can disable inputs and show a banner.
+
+**Threat mitigated:** Identity laundering. Without this rule, an
+attacker who compromised a verified account could change CNP/name to
+match a stolen identity, effectively transferring the verified status
+to fraudulent data. Even with the digital card revoked, the underlying
+profile would carry undeserved trust signals.
+
+**Business rule rationale:** Verification is anchored to physical
+documents inspected by an agent. Allowing field changes between
+verifications breaks the cryptographic chain of trust between the
+agent's approval and the credential's claim_value.
+
+### Lifecycle
+
+```
+1. User registers     -> fields editable, no credentials
+2. Uploads ID         -> source_documents row, status='pending'
+3. Agent approves     -> 3 credentials created:
+                         - identity_verified (locks fields)
+                         - student_verified / elev_verified
+                         - national_id
+                         All valid_until = 1 oct next academic year
+4. Fields are FROZEN until 1 october of current academic year
+5. On 1 october       -> credentials auto-expire (lazy cleanup in
+                         get_verification_status())
+6. Fields editable    -> user must re-upload documents for re-validation
+```
+
+### Tested with 17 integration tests
+
+See `tests/integration/test_profile_freeze.py`. Covers:
+
+- Academic year boundary logic (3 edge cases at 30 sep / 1 oct / etc.)
+- Unverified users can change everything (3 tests)
+- Verified users blocked on each frozen field (5 tests, one per field)
+- Expired credentials automatically unlock fields (1 test)
+- No-op updates (same value) are not blocked (1 test)
+- `/users/me/verification-status` returns correct payload (2 tests)
+
+---
+
 ## 5. Known Vulnerabilities & Gaps
 
 ### Critical Issues Summary

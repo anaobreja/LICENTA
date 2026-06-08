@@ -271,3 +271,64 @@ suprapuse, indiferent de tren sau traseu.
 **Justificare:** Pasagerul fizic nu poate fi �n doua trenuri �n acela?i timp.
 Aceasta regula previne ?i fraudele de tip "rezervare multipla speculativa"
 (blocare locuri �n trenuri diferite pentru a alege ulterior).
+
+### UC45 - Imutabilitate date validate (Frozen Fields)
+
+**Actor:** Pasager (orice user cu identitate validata).
+
+**Tip:** Constrângere de business cross-cutting pe UC6 (Modificare profil).
+
+**Precondi?ii:** Utilizatorul are credential `identity_verified` activ
+(emis de un agent universitar, neexpirat).
+
+**Regula:** Urmatoarele câmpuri NU pot fi modificate pâna la expirarea
+credentialului:
+
+- `cnp` (Cod Numeric Personal)
+- `first_name`, `last_name`
+- `birth_date`
+- `home_station_id` (statia de domiciliu, derivata din adresa validata)
+
+**Expirare:** Credentialul `identity_verified` are `valid_until = 1 oct
+al anului universitar curent`. Logica:
+
+- Daca verificarea s-a facut între 1 ian si 30 sep -> expira pe 1 oct anul curent.
+- Daca verificarea s-a facut între 1 oct si 31 dec -> expira pe 1 oct anul urmator.
+
+**Flux la modificare:**
+
+1. Utilizatorul trimite `PATCH /users/me` cu un câmp FROZEN modificat.
+2. Sistemul:
+   - Verifica `is_identity_verified(user_id)` -> True.
+   - Compara fiecare câmp FROZEN din payload cu valoarea curenta din DB.
+   - Daca exista delta -> raspunde **HTTP 403** cu detalii:
+     ```json
+     {
+       "error": "frozen_field_modification_blocked",
+       "frozen_fields_attempted": ["cnp"],
+       "expires_at": "2026-10-01",
+       "days_until_expiry": 115,
+       "message": "Nu puteti modifica câmpurile [\"cnp\"] cât timp
+                   identitatea este verificata. Verificarea expira pe 2026-10-01."
+     }
+     ```
+3. Frontend (Profile.jsx):
+   - Apeleaza `GET /users/me/verification-status` la mount.
+   - Daca `is_verified=true`, afișeaza banner sus cu data expirarii.
+   - Marcheaza input-urile FROZEN cu icon 🔒 și atribut `disabled`.
+   - Sectiunea "Ruta personala" devine read-only.
+
+**Postcondi?ii:** Datele validate raman intacte. La 1 oct, credentialul
+expira automat (lazy cleanup în `get_verification_status()`), iar
+câmpurile redevin editabile. Utilizatorul trebuie sa reîncarce
+documentele și sa fie re-aprobat de agent pentru a primi un nou card.
+
+**Justificare:** Previne **identity laundering** — un atacator cu access
+la cont nu poate transfera statusul "verificat" catre date frauduloase
+(CNP/nume schimbat). Verificarea ramane ancorata în actele fizice
+inspectate de agent.
+
+**Acoperire de teste:** 17 teste integration în
+`tests/integration/test_profile_freeze.py` (TestAcademicYearBoundary,
+TestUnverifiedUserCanModifyEverything, TestVerifiedUserCannotModifyFrozenFields,
+TestExpiredVerificationUnlocksFields, TestVerificationStatusEndpoint).

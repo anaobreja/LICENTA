@@ -35,7 +35,8 @@ Sistem de gestionare a **identității digitale** pentru studenți, cu verificar
 - Containerizare Docker + Docker Compose (varianta PostgreSQL)
 - **Verificare offline a cardului digital prin semnături Ed25519** (controlorul poate valida QR-ul fără semnal — vezi secțiunea dedicată mai jos)
 - **Sistem complet de bilete cu logică CFR realistă**: selecție loc real-time (hold 5 min), anti-overlap pe intervale orare, anulare cu refund pe trepte (100% / 50% / 0%), reprogramare pe același traseu — vezi secțiunea dedicată mai jos
-- **Test automate**: 168 teste backend (pytest, 18 noi pentru sistemul de bilete) + 19 teste frontend (Node + Web Crypto API), toate trec
+- **Imutabilitate date personale după validare**: câmpurile CNP, nume, data nașterii și stația de domiciliu devin frozen până la expirarea verificării (1 octombrie, începutul anului universitar următor). Previne identity laundering — vezi secțiunea 4.1 din SECURITY_ASSESSMENT.md
+- **Test automate**: 183 teste backend (pytest, 35 noi: 18 sistem bilete + 17 frozen fields) + 19 teste frontend (Node + Web Crypto API), toate trec
 
 ### Work in progress / Limitări cunoscute
 
