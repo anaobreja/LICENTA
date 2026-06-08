@@ -31,7 +31,7 @@ Sistem de gestionare a **identității digitale** pentru studenți, cu verificar
 - Progress stepper pe dashboard pasager (4 pași)
 - Notificări in-app cu badge în navbar
 - Export date personale (GDPR)
-- Baza de date: 18 tabele, normalizată 3NF (PostgreSQL)
+- Baza de date: 25 tabele organizate în 4 module logice (identitate, transport feroviar, bilete, audit), normalizată 3NF (PostgreSQL)
 - Containerizare Docker + Docker Compose (varianta PostgreSQL)
 - **Verificare offline a cardului digital prin semnături Ed25519** (controlorul poate valida QR-ul fără semnal — vezi secțiunea dedicată mai jos)
 - **Test automate**: 150 teste backend (pytest) + 19 teste frontend (Node + Web Crypto API), toate trec
@@ -283,7 +283,7 @@ Aplicația devine disponibilă la: **http://127.0.0.1:8765**
     ├── docs/                   — Diagrame (use case, arhitectură, ER, secvență)
     │
     └── database/
-        ├── schema.sql          — Schema PostgreSQL (18 tabele)
+        ├── schema.sql          — Schema PostgreSQL (25 tabele, 4 module)
         └── queries.sql         — 50+ interogări reprezentative
 
 ---

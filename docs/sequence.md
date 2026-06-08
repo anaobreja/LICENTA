@@ -180,3 +180,109 @@ sequenceDiagram
     API-->>FE: JSON complet cu toate datele
     FE->>FE: Browser descarcă fișierul JSON
 ```
+
+
+---
+
+## 6. Flux: Cumpărare bilet de tren
+
+```mermaid
+sequenceDiagram
+    actor P as Pasager
+    participant FE as Frontend
+    participant API as FastAPI
+    participant DB as PostgreSQL
+
+    P->>FE: Accesează /buy-ticket
+    FE->>API: GET /map/stations
+    API->>DB: SELECT stations
+    DB-->>API: lista stații
+    API-->>FE: stations array
+    P->>FE: Selectează stație plecare + sosire + dată + tip bilet
+    FE->>API: POST /tickets/quote {from_station, to_station, ticket_type}
+    API->>DB: SELECT route + train + tariff_brackets (calcul preț pe km)
+    DB-->>API: preț + reduceri aplicabile (student_verified -> -50%)
+    API-->>FE: {base_price, discounts, final_price}
+    P->>FE: Confirmă cumpărarea
+    FE->>API: POST /tickets/buy {train_id, from, to, payment_method}
+    API->>API: Verifică credențialele user-ului (student_verified pentru reducere)
+    API->>DB: INSERT INTO tickets (user_id, train_id, status='active', price)
+    API->>DB: INSERT INTO qr_tokens (ticket_id, token, expires_at)
+    API->>DB: INSERT INTO notifications (user_id, "Bilet cumpărat #X")
+    DB-->>API: ticket_id
+    API-->>FE: {ticket_id, qr_token, qr_data_url}
+    FE->>FE: Afișează QR-ul biletului + buton "Vezi în MyTickets"
+```
+
+---
+
+## 7. Flux: Validare bilet în tren (de către conductor)
+
+```mermaid
+sequenceDiagram
+    actor PA as Pasager
+    actor CO as Conductor
+    participant FEP as Frontend Pasager
+    participant FEC as Frontend Conductor
+    participant API as FastAPI
+    participant DB as PostgreSQL
+
+    PA->>FEP: Deschide MyTickets și afișează QR-ul biletului
+    CO->>FEC: Accesează /validate-ticket și pornește scanner-ul
+    CO->>FEC: Scanează QR-ul de pe telefonul pasagerului
+    FEC->>API: POST /tickets/validate {token}
+    API->>DB: SELECT qr_tokens WHERE token=? JOIN tickets JOIN trains JOIN users
+    DB-->>API: ticket + train info + user info
+    API->>API: Verifică: expires_at, status='active', tren corect, dată călătorie corectă
+    alt Bilet valid
+        API->>DB: INSERT INTO validations (ticket_id, conductor_id, result='valid', train_id)
+        API->>DB: UPDATE tickets SET status='used' (one-way) sau păstrează 'active' (subscription)
+        API->>DB: INSERT INTO notifications (pasager, "Bilet validat în trenul X")
+        API-->>FEC: {result='valid', holder, train_info, journey}
+        FEC->>FEC: Ecran VERDE + detalii călătorie (origine -> destinație, tren, oră)
+    else Bilet invalid/expirat/folosit
+        API->>DB: INSERT INTO validations (result='invalid', notes)
+        API-->>FEC: {result='invalid', reason}
+        FEC->>FEC: Ecran ROȘU + motiv
+    end
+```
+
+---
+
+## 8. Flux: Verificare offline a cardului digital (Ed25519 fără internet)
+
+> **NOTĂ:** Acest flux ilustrează cum sistemul funcționează FĂRĂ conexiune la internet pentru conductor.
+
+```mermaid
+sequenceDiagram
+    actor PA as Pasager
+    actor CO as Conductor
+    participant FEP as Frontend Pasager
+    participant FEC as Frontend Conductor
+    participant API as FastAPI (NU e accesată offline!)
+
+    Note over FEC,API: PRECONDIȚIE — La pornire (cu internet)
+    FEC->>API: GET /verification-key (o singură dată, mod online)
+    API-->>FEC: {pem, raw_base64, kid, algorithm: "Ed25519"}
+    FEC->>FEC: Salvează în localStorage (cache permanent până la rotație cheie)
+
+    Note over PA,FEP: OFFLINE — Pasager generează token semnat
+    PA->>FEP: Generează token QR (funcționează offline dacă a fost emis recent)
+    FEP->>FEP: Afișează QR cu token base64url(payload).base64url(ed25519_signature)
+
+    Note over CO,FEC: OFFLINE — Conductor scanează QR
+    CO->>FEC: Activează toggle "Offline mode" + scanează QR
+    FEC->>FEC: getVerificationKey() — citește din localStorage (FĂRĂ fetch)
+    FEC->>FEC: crypto.subtle.importKey(raw, Ed25519)
+    FEC->>FEC: crypto.subtle.verify(signature, payload)
+    alt Semnătură validă + exp în viitor
+        FEC->>FEC: Decode payload, verifică exp, iat, claims
+        FEC->>FEC: Ecran VERDE + claims (FĂRĂ call la backend!)
+    else Semnătură invalidă / expirat
+        FEC->>FEC: Ecran ROȘU + motiv (tampering / expirare)
+    end
+
+    Note over FEC,API: Niciun call la backend in pasii 2-3 — telefonul conductorului poate fi in mod avion
+    Note over FEC,API: Cheia publica se descarca o singura data, iar rotatia se face prin push notification si invalidare cache
+    Note over FEC,API: Spre deosebire de modul online, aici NU se inregistreaza nimic in card_verifications — audit se face doar la sincronizare ulterioara
+```
