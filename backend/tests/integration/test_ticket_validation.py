@@ -68,7 +68,7 @@ def _make_verifier_with_fresh_token(client) -> str:
 
 
 def _setup_route_with_train(engine, code_a: str, code_b: str) -> tuple[int, int, int]:
-    nonce = next(_seq)
+    nonce = uuid.uuid4().hex[:8]  # unique per call across runs
     with engine.begin() as conn:
         s1 = conn.execute(text("""
             INSERT INTO stations (code, name, city, country)

@@ -61,6 +61,7 @@ def _ensure_test_infrastructure(conn) -> tuple[int, int, int]:
 # Counter global pentru a evita coliziuni de UNIQUE (route_code, train_number)
 # in teste consecutive care insereaza pe acelasi DB
 import itertools
+import uuid
 _seq = itertools.count(1)
 
 
@@ -73,7 +74,7 @@ def _seed_two_trains_same_window(engine, base_date: date) -> tuple[int, int]:
       - Trenul A: 08:00 -> 12:00 (regio)
       - Trenul B: 10:00 -> 14:00 (regio, overlap cu A: 10-12)
     """
-    nonce = next(_seq)
+    nonce = uuid.uuid4().hex[:8]  # unique per call across runs
     with engine.begin() as conn:
         op_id, s1, s2 = _ensure_test_infrastructure(conn)
 
@@ -636,7 +637,7 @@ class TestRescheduleTicket:
 
         # Adaug un al treilea tren pe traseu DIFERIT — folosim 2 statii NOI
         # (fixture-ul de baza creeaza doar TST01/TST02, ne trebuie altele).
-        nonce = next(_seq)
+        nonce = uuid.uuid4().hex[:8]  # unique per call across runs
         with engine.begin() as conn:
             op_id = conn.execute(text("SELECT operator_id FROM railway_operators LIMIT 1")).scalar()
             s_new1 = conn.execute(text("""

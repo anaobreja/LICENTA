@@ -13,6 +13,7 @@ Toate apelurile cer auth, asa cum cer endpoint-urile reale.
 from __future__ import annotations
 
 import itertools
+import uuid
 
 import pytest
 from sqlalchemy import text
@@ -35,7 +36,7 @@ def _setup_test_route_with_train(engine, code_a: str, code_b: str,
     testa endpoint-urile map.
     Returneaza (station_a_id, station_b_id, train_id).
     """
-    nonce = next(_seq)
+    nonce = uuid.uuid4().hex[:8]  # unique per call across runs
     with engine.begin() as conn:
         s1 = conn.execute(text("""
             INSERT INTO stations (code, name, city, country, latitude, longitude,

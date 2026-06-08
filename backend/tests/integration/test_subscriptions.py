@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 import itertools
+import uuid
 
 import pytest
 from sqlalchemy import text
@@ -111,7 +112,7 @@ def _setup_user_with_home_and_university(engine, user_id: int,
         """), {"hs": home_s, "uni": univ_id, "uid": user_id})
 
         # Adauga ruta home <-> univ in routes (necesar pentru get_route_distance_km)
-        nonce = next(_seq)
+        nonce = uuid.uuid4().hex[:8]  # unique per call across runs
         op_id = conn.execute(text("SELECT operator_id FROM railway_operators LIMIT 1")).scalar()
         conn.execute(text("""
             INSERT INTO routes (route_name, route_code, operator_id,
@@ -147,7 +148,7 @@ def _setup_arbitrary_route(engine, code_a: str, code_b: str,
             RETURNING station_id
         """), {"c": code_b, "n": f"Station {code_b}"}).scalar()
 
-        nonce = next(_seq)
+        nonce = uuid.uuid4().hex[:8]  # unique per call across runs
         op_id = conn.execute(text("SELECT operator_id FROM railway_operators LIMIT 1")).scalar()
         conn.execute(text("""
             INSERT INTO routes (route_name, route_code, operator_id,
@@ -480,7 +481,7 @@ class TestSubscriptionTicketIntegration:
 
     def _setup_train_with_route(self, engine, s1, s2, distance=100):
         """Creeaza un tren cu ruta s1->s2 si layout."""
-        nonce = next(_seq)
+        nonce = uuid.uuid4().hex[:8]  # unique per call across runs
         with engine.begin() as conn:
             op_id = conn.execute(
                 text("SELECT operator_id FROM railway_operators LIMIT 1")
