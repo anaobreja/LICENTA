@@ -506,6 +506,17 @@ export const verifyOfflineToken = async (token) => {
 }
 
 // User
+/**
+ * Returneaza statusul de verificare al utilizatorului:
+ *   { is_verified, verified_at, expires_at, days_until_expiry,
+ *     frozen_fields, academic_year, message }
+ *
+ * Folosit in Profile.jsx pentru a afisa banner si a dezactiva
+ * campurile FROZEN.
+ */
+export const getVerificationStatus = () =>
+  apiCall('/users/me/verification-status')
+
 export const getUserProfile = () =>
   apiCall('/users/me')
 
