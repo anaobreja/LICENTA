@@ -962,7 +962,9 @@ def list_my_documents(
             """
             SELECT id, document_type, document_number_masked, document_image_path,
                    document_image_path_verso, status, uploaded_at, university_name, year_of_study,
-                   ci_number, ci_name, ci_date_of_birth, ci_sex, ci_address
+                   ci_number, ci_name, ci_date_of_birth, ci_sex, ci_address,
+                (document_image_path IS NOT NULL) AS has_front_image,
+                (document_image_path_verso IS NOT NULL) AS has_verso_image
             FROM source_documents
             WHERE user_id = :user_id
             ORDER BY uploaded_at DESC

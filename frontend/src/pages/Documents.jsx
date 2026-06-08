@@ -3,6 +3,46 @@ import { getMyDocuments, submitIdentityValidationRequest, getDocumentPhotoBlobUr
 import { useToast } from '../components/Toast.jsx'
 import { UNIVERSITATI } from '../constants/universities'
 
+// Componenta pentru thumbnail document - incarca blob URL cu auth header
+function DocumentThumbnail({ docId, side = 'front', alt, className, onError }) {
+  const [src, setSrc] = useState(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let blobUrl = null
+    let cancelled = false
+    getDocumentPhotoBlobUrl(docId, side)
+      .then((url) => {
+        if (cancelled) {
+          if (url) try { URL.revokeObjectURL(url) } catch (_) {}
+          return
+        }
+        blobUrl = url
+        setSrc(url)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFailed(true)
+          if (onError) onError()
+        }
+      })
+    return () => {
+      cancelled = true
+      if (blobUrl) try { URL.revokeObjectURL(blobUrl) } catch (_) {}
+    }
+  }, [docId, side])
+
+  if (failed || !src) {
+    return (
+      <div className={(className || '') + ' bg-slate-700 flex items-center justify-center text-xs text-slate-400'}>
+        {failed ? 'N/A' : '...'}
+      </div>
+    )
+  }
+  return <img src={src} alt={alt} className={className} />
+}
+
+
 function Documents() {
   const toast = useToast()
   const [documents, setDocuments] = useState([])
@@ -185,14 +225,12 @@ function Documents() {
 
   const formDisabled = isRenewal ? !renewalOpen : false
 
-  const handleViewImage = async (doc) => {
+  const handleViewImage = async (doc, side = 'front') => {
     try {
-      const blobUrl = await getDocumentPhotoBlobUrl(doc.id)
-      setViewingImage({ ...doc, photoBlobUrl: blobUrl })
-    } catch (err) {
-      console.error('Could not load image', err)
-      // Fallback: open modal with original path
-      setViewingImage(doc)
+      const url = await getDocumentPhotoBlobUrl(doc.id, side)
+      setViewingImage({ ...doc, photoBlobUrl: url, _customLabel: side === 'verso' ? 'Document verso' : 'Document fata' })
+    } catch (e) {
+      setMsg({ type: 'error', text: 'Nu am putut incarca poza ' + side + ': ' + e.message })
     }
   }
 
@@ -613,17 +651,67 @@ function Documents() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="inline-block bg-blue-200 dark:bg-blue-800 dark:text-blue-200 text-blue-800 text-xs font-semibold px-2 py-1 rounded">PENDING</span>
-                        {doc.document_image_path && (
-                          <button
-                            onClick={() => handleViewImage(doc)}
-                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                          >
-                            📷 Vezi poza legitimației
-                          </button>
-                        )}
-                      </div>
+                      <div className="space-y-3 pt-1">
+                          <div className="flex items-center justify-between">
+                            <span className="inline-block bg-blue-200 dark:bg-blue-800 dark:text-blue-200 text-blue-800 text-xs font-semibold px-2 py-1 rounded">{current.status?.toUpperCase() || 'PENDING'}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-3 items-end">
+                            {currentProfilePhotoUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setViewingImage({ ...current, _customImage: currentProfilePhotoUrl, _customLabel: 'Poza profil' })}
+                                className="group flex flex-col items-center gap-1"
+                                title="Click pentru zoom"
+                              >
+                                <img
+                                  src={currentProfilePhotoUrl}
+                                  alt="Poza profil"
+                                  className="w-20 h-20 rounded-full border-2 border-blue-700 object-cover group-hover:border-blue-300 transition"
+                                />
+                                <span className="text-xs text-blue-200 dark:text-blue-300">Profil</span>
+                              </button>
+                            )}
+                            {(current.has_front_image || current.has_photo || current.document_image_path) && (
+                              <button
+                                type="button"
+                                onClick={() => handleViewImage(current, 'front')}
+                                className="group flex flex-col items-center gap-1"
+                                title="Click pentru zoom"
+                              >
+                                <DocumentThumbnail
+                                  docId={current.id}
+                                  side="front"
+                                  alt="Document fata"
+                                  className="w-20 h-20 rounded-lg border-2 border-blue-700 object-cover group-hover:border-blue-300 transition"
+                                />
+                                <span className="text-xs text-blue-200 dark:text-blue-300">
+                                  {current.document_type === 'student_card' || current.document_type === 'student_id'
+                                    ? 'Legit. fata'
+                                    : current.document_type === 'passport' ? 'Pasaport' : 'CI fata'}
+                                </span>
+                              </button>
+                            )}
+                            {(current.has_verso_image || current.has_photo_verso || current.document_image_path_verso) && (
+                              <button
+                                type="button"
+                                onClick={() => handleViewImage(current, 'verso')}
+                                className="group flex flex-col items-center gap-1"
+                                title="Click pentru zoom"
+                              >
+                                <DocumentThumbnail
+                                  docId={current.id}
+                                  side="verso"
+                                  alt="Document verso"
+                                  className="w-20 h-20 rounded-lg border-2 border-blue-700 object-cover group-hover:border-blue-300 transition"
+                                />
+                                <span className="text-xs text-blue-200 dark:text-blue-300">
+                                  {current.document_type === 'student_card' || current.document_type === 'student_id'
+                                    ? 'Legit. verso' : 'CI verso'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
                     </div>
                   ))}
                 </div>
@@ -637,7 +725,7 @@ function Documents() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white dark:bg-slate-950 rounded-2xl max-w-2xl w-full max-h-96 overflow-auto">
               <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                <h3 className="text-lg font-bold dark:text-white">{getDocumentTypeLabel(viewingImage.document_type)}</h3>
+                <h3 className="text-lg font-bold dark:text-white">{viewingImage._customLabel || getDocumentTypeLabel(viewingImage.document_type)}</h3>
                 <button
                   onClick={() => {
                     if (viewingImage?.photoBlobUrl) {
@@ -652,7 +740,7 @@ function Documents() {
               </div>
               <div className="p-4 flex justify-center">
                 <img
-                  src={viewingImage.photoBlobUrl || viewingImage.document_image_path}
+                  src={viewingImage._customImage || viewingImage.photoBlobUrl || viewingImage.document_image_path}
                   alt={getDocumentTypeLabel(viewingImage.document_type)}
                   className="max-w-full max-h-80 rounded-lg"
                 />
