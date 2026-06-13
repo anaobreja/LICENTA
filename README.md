@@ -39,7 +39,13 @@ Sistem de gestionare a **identității digitale** pentru studenți, cu verificar
 - **Abonamente CFR cu scope pe ruta** (`monthly`/`annual`): cumparare cu reducere 90% pentru studenti pe ruta home <-> universitate (OUG 11/2024), anti-overlap pe ruta, anulare cu refund pro-rata. Biletele pe ruta acoperita devin automat gratuite (price=0, marcate cu `uses_subscription_id`). Notificare 7 zile inainte de expirare. Vezi sectiunea dedicata mai jos.
 - **Harta feroviara interactiva cu trasee reale CFR**: vizualizare ruta pe OpenStreetMap + OpenRailwayMap, polilinia urmeaza sina prin toate statiile intermediare cu GPS, markerele afiseaza DOAR opririle comerciale reale ale trenului (filtrate prin `is_commercial_stop` din XML CFR/Ferotrafic). Operatorul fiecarui tren (CFR Calatori, Ferotrafic, Regio Calatori, Astra Trans Carpatic, etc.) e afisat explicit langa numarul trenului — utilizatorul vede clar diferentele intre operatori (ex: IC 553 CFR opreste la Ploiesti Sud, IC 11762 Ferotrafic NU opreste, conform XML oficial). Vezi sectiunea "Harta feroviara" mai jos.
 - **Pipeline de geocoding GPS multi-pass cu trasabilitate completa**: cele 1818 statii CFR au fost geocodate automat (99.5% acoperire) prin OpenStreetMap (Overpass + Nominatim) + interpolare iterativa din vecinii pe rute, cu blacklist persistent pentru outlieri. ZERO coordonate hardcodate. Sursa fiecarei coordonate (`gps_source`) e trasabila in DB cu tier-uri A-F (manual / OSM-exact / OSM-bbox / interpolare / Nominatim / legacy). Vezi sectiunea "Calitatea datelor GPS" mai jos.
-- **Test automate**: 203 teste backend (pytest, 55 noi: 18 bilete + 17 frozen + 20 abonamente) + 19 teste frontend (Node + Web Crypto API), toate trec
+- **Test automate**: **533 teste totale**, toate trec:
+  - **489 teste backend** (pytest) — 36 fișiere organizate în 3 categorii:
+    - `tests/unit/` (9 fișiere, ~135 teste) — logică pură: auth, crypto/signing Ed25519, MRZ parsing, refund matrix, security primitives, tickets, uploads, users
+    - `tests/integration/` (26 fișiere, ~353 teste) — API + DB end-to-end: auth_mfa, cross_university_security, identity, journey_quote, map_route_geometry, multi_passenger, offline_presentation, performance_smoke, personal_route, profile_freeze, qr_lifecycle, seat_concurrency, security_inputs, subscriptions, ticket_validation, trip_planner, etc.
+    - `tests/e2e/` (1 fișier, 1 test) — flow complet student → agent → conductor
+  - **25 teste frontend Vitest** (`frontend/tests/pages/`) — UI pages cu MSW mocks: BuyTicket, Documents, MyTickets
+  - **19 teste frontend Node + Web Crypto API** (`frontend/tests/test_offline_verify.mjs`) — verifică că `verifyOfflineToken()` din browser produce aceleași rezultate ca `signing.py` din backend (paritate cross-platform Ed25519, edge case-uri base64url padding, tampering, expirare)
 
 ### Work in progress / Limitări cunoscute
 
@@ -149,33 +155,42 @@ Suite-ul este organizat pe niveluri de testare. Toate testele de mai jos
 trec curent (fara skipped, fara warnings critice).
 
 ```bash
-# === BACKEND (150 teste pytest, organizate in 4 categorii) ===
+# === BACKEND (489 teste pytest, organizate in 3 categorii) ===
 
 # Tot suite-ul backend:
-cd backend && pytest tests/ -v
+cd backend
+python -m pytest tests/ -v
 
-# Doar testele unit (rapide, fara DB integration grea):
-cd backend && pytest tests/unit -v
+# Doar testele unit (~135 teste, rapide, fara DB):
+python -m pytest tests/unit -v
 
-# Doar testele de integrare API + DB:
-cd backend && pytest tests/integration -v
+# Doar testele de integrare API + DB (~353 teste):
+python -m pytest tests/integration -v
 
-# Doar end-to-end (flow complet student -> agent -> conductor):
-cd backend && pytest tests/e2e -v
+# Doar end-to-end (1 test, flow complet student -> agent -> conductor):
+python -m pytest tests/e2e -v
 
 # Subset focalizat pe componenta criptografica (cele mai relevante pentru
 # capitolul de securitate al lucrarii):
-cd backend && pytest tests/unit/test_signing.py tests/unit/test_crypto_keys.py tests/integration/test_offline_presentation.py -v
+python -m pytest tests/unit/test_signing.py tests/unit/test_crypto_keys.py tests/integration/test_offline_presentation.py -v
+
+# Cu raport de code coverage (genereaza htmlcov/index.html):
+python -m pytest tests/ --cov=app --cov-report=html --cov-report=term
 
 # Load testing (separat - necesita backend pornit):
-cd backend && locust -f tests/performance/locustfile.py --host http://127.0.0.1:8000
+locust -f tests/performance/locustfile.py --host http://127.0.0.1:8000
 
 
-# === FRONTEND (19 teste pe verificarea offline a tokenurilor) ===
+# === FRONTEND (44 teste totale, in doua sisteme) ===
 
-cd frontend && npm test
-# Echivalent:
-cd frontend && node tests/test_offline_verify.mjs
+cd frontend
+
+# 25 teste Vitest pentru pagini UI cu MSW mocks (BuyTicket, Documents, MyTickets):
+npm test
+
+# 19 teste pe verificarea offline Ed25519 (Node + Web Crypto API,
+# fara dependinte externe -- dovedesc paritatea cross-platform browser <-> Python):
+node tests/test_offline_verify.mjs
 ```
 
 **De ce aceasta acoperire este suficienta pentru lucrare:**
