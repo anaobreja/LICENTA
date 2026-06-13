@@ -560,11 +560,37 @@ Fluxul complet pe două dispozitive:
 
 ### Acces public temporar (fără WiFi comun)
 
-Folosind **ngrok** (gratuit), poți expune aplicația pe internet:
+Pentru a expune aplicația pe internet — util pentru demo de pe telefon fără să fie în aceeași rețea WiFi, sau pentru a permite cuiva să testeze de la distanță — există două opțiuni:
+
+#### Opțiunea 1 — VS Code Dev Tunnels (recomandat)
+
+**Cel mai simplu pentru workflow-ul de development**, fără cont separat, fără install — direct din VS Code:
+
+1. Deschide aplicația și pornește frontend-ul (`npm run dev` în terminal, sau backend-ul prin `python run.py`)
+2. În VS Code, deschide panoul **Ports** (Ctrl+\\` apoi click pe tab-ul **PORTS**, sau Command Palette → `Ports: Focus on Ports View`)
+3. Click pe **Add Port** și introdu portul aplicației (ex: `5173` pentru Vite, `8765` pentru proxy_server.py)
+4. Pe rândul portului adăugat, schimbă **Visibility** din `Private` în **`Public`** (click dreapta → `Port Visibility` → `Public`)
+5. Copiază URL-ul din coloana **Forwarded Address** — va fi de forma:
+
+       https://c9q8rq05-5173.euw.devtunnels.ms/
+
+6. Deschide URL-ul de pe orice dispozitiv (telefon, alt laptop, altă rețea) — **funcționează imediat cu HTTPS valid**, fără să accepți certificate
+
+**Avantaje față de ngrok**:
+- Nu necesită cont sau autentificare separată (folosește contul GitHub/Microsoft din VS Code)
+- HTTPS cu certificat valid din prima (camera de pe telefon merge fără warnings)
+- URL stabil cât timp tunelul rămâne activ
+- Tunelul se închide automat când închizi VS Code → nu rămâne deschis accidental
+
+**Important**: dacă pornești și backend-ul separat, expune și portul `8000` cu vizibilitate Public, altfel apelurile API vor eșua.
+
+#### Opțiunea 2 — ngrok (alternativă)
+
+Dacă preferi un tool dedicat sau nu folosești VS Code:
 
     ngrok http 8765
 
-Se generează un URL de tipul `https://abc123.ngrok.io` — funcționează de pe orice rețea, cât timp laptopul rulează.
+Se generează un URL de tipul `https://abc123.ngrok-free.app` — funcționează similar, dar necesită cont ngrok gratuit pentru sesiuni mai lungi de 2 ore.
 
 ---
 
