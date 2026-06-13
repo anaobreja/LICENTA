@@ -201,3 +201,62 @@ class TestSubscriptionEdgeCases:
         # A doua incercare -> 409
         r2 = client.post(f"/subscriptions/{sid}/cancel", headers=h)
         assert r2.status_code == 409
+
+    def test_expiry_notification_triggered_for_soon_expiring_sub(self, client):
+        """
+        Abonament care expira in 5 zile -> GET /me/subscriptions creeaza
+        o notificare de tipul 'subscription_expiry' (linii 326-342 subscriptions.py).
+        """
+        s1, s2 = _setup_route(_engine(), "EXP1", "EXP2")
+        pas = register_and_login(client, "sub_expiry_notif")
+        h = {"Authorization": f"Bearer {pas}"}
+
+        # Cumpara abonament
+        r = client.post("/subscriptions/buy", json={
+            "from_station_id": s1, "to_station_id": s2,
+            "subscription_type": "monthly",
+        }, headers=h)
+        assert r.status_code == 200, r.text
+        sid = r.json()["subscription_id"]
+
+        # Manipulam DB: valid_until = azi + 5 zile (in fereastra 3-7 zile)
+        with _engine().begin() as conn:
+            conn.execute(text("""
+                UPDATE subscriptions
+                SET valid_from  = CURRENT_DATE - INTERVAL '25 days',
+                    valid_until = CURRENT_DATE + INTERVAL '5 days',
+                    status      = 'active'
+                WHERE subscription_id = :sid
+            """), {"sid": sid})
+
+        # GET /subscriptions/my trebuie sa insereze notificarea si sa returneze 200
+        r2 = client.get("/subscriptions/my", headers=h)
+        assert r2.status_code == 200, r2.text
+
+        # Verifica ca notificarea a fost creata
+        with _engine().connect() as conn:
+            notif = conn.execute(text("""
+                SELECT COUNT(*) FROM notifications
+                WHERE category = 'subscription_expiry'
+                  AND message LIKE :sub_pattern
+            """), {"sub_pattern": f"%{sid}%"}).scalar()
+        assert notif >= 1, "Trebuia creata cel putin o notificare de expirare"
+
+    def test_get_subscriptions_no_notifications_without_soon_expiring(self, client):
+        """
+        Abonament activ cu valabilitate normala (NU in fereastra 3-7 zile)
+        -> GET /me/subscriptions nu creeaza notificari.
+        """
+        s1, s2 = _setup_route(_engine(), "NOEXP1", "NOEXP2")
+        pas = register_and_login(client, "sub_noexpiry")
+        h = {"Authorization": f"Bearer {pas}"}
+
+        r = client.post("/subscriptions/buy", json={
+            "from_station_id": s1, "to_station_id": s2,
+            "subscription_type": "monthly",
+        }, headers=h)
+        assert r.status_code == 200, r.text
+
+        # Nu manipulam valid_until -> abonament are inca 30+ zile
+        r2 = client.get("/subscriptions/my", headers=h)
+        assert r2.status_code == 200

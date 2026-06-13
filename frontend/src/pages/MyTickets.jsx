@@ -773,14 +773,15 @@ function CompactTicketBody({ ticket: t }) {
       />
 
       <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-700/50">
-        <div className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-slate-700 dark:text-slate-300 font-medium truncate">
-            {ticketPassengerName(t)}
-          </span>
-          {seats.length > 0 ? (
-            <span className="font-mono text-slate-500 dark:text-slate-400 shrink-0">
-              V{seats[0].car} · {seats[0].seat}
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="text-[10px] font-semibold tracking-wider text-slate-500 dark:text-slate-400">PASAGER</div>
+            <span className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">
+              {ticketPassengerName(t)}
             </span>
+          </div>
+          {seats.length > 0 ? (
+            <SeatBox car={seats[0].car} seat={seats[0].seat} size="sm" />
           ) : (
             <span className="text-slate-400 dark:text-slate-500 text-[10px] shrink-0">fără loc</span>
           )}
@@ -829,15 +830,17 @@ function TicketCard({ t, highlight, onCancel, onReschedule, onShowQR }) {
 
       {/* Actiuni */}
       <div className="px-4 pb-3 pt-1 flex flex-wrap gap-2 border-t border-slate-100 dark:border-slate-700/50">
-        {!isCancelled && (
-          <button
-            type="button"
-            onClick={() => onShowQR(t)}
-            className="flex-1 min-w-[140px] px-3 py-2 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
-          >
-            Vezi bilet & QR
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => onShowQR(t)}
+          className={`flex-1 min-w-[140px] px-3 py-2 rounded-lg text-sm font-semibold text-white ${
+            isCancelled
+              ? 'bg-slate-400 hover:bg-slate-500 dark:bg-slate-600 dark:hover:bg-slate-500'
+              : 'bg-emerald-600 hover:bg-emerald-700'
+          }`}
+        >
+          Vezi bilet & QR
+        </button>
         {canModify && (
           <>
             <button

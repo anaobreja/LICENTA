@@ -783,6 +783,33 @@ COMMENT ON TABLE ticket_seats IS
 
 
 -- ---------------------------------------------------------------------------
+--  4b. ticket_legs  (segmente journey multi-leg)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ticket_legs (
+    leg_id                  SERIAL PRIMARY KEY,
+    ticket_id               INTEGER NOT NULL
+                                REFERENCES tickets(ticket_id) ON DELETE CASCADE,
+    leg_order               INTEGER NOT NULL,
+    train_id                INTEGER NOT NULL
+                                REFERENCES trains(train_id) ON DELETE RESTRICT,
+    departure_station_id    INTEGER NOT NULL
+                                REFERENCES stations(station_id) ON DELETE RESTRICT,
+    arrival_station_id      INTEGER NOT NULL
+                                REFERENCES stations(station_id) ON DELETE RESTRICT,
+    travel_date             DATE NOT NULL,
+    seat_id                 INTEGER REFERENCES seats(seat_id) ON DELETE SET NULL,
+    price                   NUMERIC(10,2) NOT NULL DEFAULT 0,
+    discount_applied        NUMERIC(5,2) DEFAULT 0,
+    qr_token                TEXT,
+    qr_token_hash           TEXT,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_ticket_legs_order UNIQUE (ticket_id, leg_order)
+);
+CREATE INDEX IF NOT EXISTS idx_ticket_legs_ticket ON ticket_legs(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_legs_train_date ON ticket_legs(train_id, travel_date);
+
+
+-- ---------------------------------------------------------------------------
 --  5. Coloane noi pe tickets pentru lifecycle (cancel, refund, reschedule)
 -- ---------------------------------------------------------------------------
 ALTER TABLE tickets
