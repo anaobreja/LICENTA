@@ -1933,9 +1933,13 @@ def train_verify(
     #   - lung-semnat (offline_token, contine ".") -> decodam payload,
     #     extragem `pid` (presentation_id) si cautam in DB dupa id;
     #   - scurt (XXXX-XXXX, introdus manual) -> cautam direct dupa token_value.
-    incoming = (payload.token or "").strip().upper()
+    raw = (payload.token or "").strip()
+    # Offline token (base64url semnat) este case-sensitive — NU aplicam upper().
+    # Token scurt (XXXX-XXXX) este case-insensitive, il normalizam la uppercase.
+    is_signed = "." in raw
+    incoming = raw if is_signed else raw.upper()
 
-    if "." in incoming:
+    if is_signed:
         try:
             decoded = decode_token_unchecked(incoming)
             pid = decoded.get("pid")
