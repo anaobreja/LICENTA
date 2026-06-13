@@ -44,6 +44,29 @@ const renderActiveShape = (props) => {
   )
 }
 
+function DocProfilePhoto({ userId, hasPhoto }) {
+  const [url, setUrl] = useState(null)
+  const activeRef = useRef(true)
+
+  useEffect(() => {
+    activeRef.current = true
+    if (!hasPhoto || !userId) { setUrl(null); return }
+    getUserProfilePhotoBlobUrl(userId)
+      .then(u => { if (activeRef.current) setUrl(u) })
+      .catch(() => {})
+    return () => { activeRef.current = false }
+  }, [userId, hasPhoto])
+
+  return (
+    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+      {url
+        ? <img src={url} alt="profil" className="w-full h-full object-cover" />
+        : <span className="text-2xl text-slate-400">👤</span>
+      }
+    </div>
+  )
+}
+
 export default function UniversityAgentDashboard() {
   const [stats, setStats] = useState(null)
   const [docs, setDocs] = useState([])
@@ -108,28 +131,6 @@ export default function UniversityAgentDashboard() {
 
   const yearLabel = (y) => y <= 4 ? `Licență ${y}` : `Master ${y - 4}`
 
-function DocProfilePhoto({ userId, hasPhoto }) {
-  const [url, setUrl] = useState(null)
-  const activeRef = useRef(true)
-
-  useEffect(() => {
-    activeRef.current = true
-    if (!hasPhoto || !userId) { setUrl(null); return }
-    getUserProfilePhotoBlobUrl(userId)
-      .then(u => { if (activeRef.current) setUrl(u) })
-      .catch(() => {})
-    return () => { activeRef.current = false }
-  }, [userId, hasPhoto])
-
-  return (
-    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-      {url
-        ? <img src={url} alt="profil" className="w-full h-full object-cover" />
-        : <span className="text-2xl text-slate-400">👤</span>
-      }
-    </div>
-  )
-}
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -250,12 +251,17 @@ function DocProfilePhoto({ userId, hasPhoto }) {
                   {doc.university_name && <span className="ml-4">Universitate: <strong className="text-slate-800 dark:text-slate-200">{doc.university_name}</strong></span>}
                 </div>
 
+                {doc.home_station_name && (
+                  <div className="text-sm text-slate-600 dark:text-slate-400 mb-3 p-2 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800">
+                    <span className="font-semibold text-indigo-800 dark:text-indigo-300">Gara de provenienta:</span>{' '}
+                    <strong className="text-slate-800 dark:text-slate-200">{doc.home_station_name}</strong>
+                    {doc.home_station_city && (
+                      <span className="text-xs text-slate-500 dark:text-slate-400 ml-2">({doc.home_station_city})</span>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex flex-wrap gap-2">
-                  {doc.has_profile_photo && (
-                    <button type="button" onClick={() => onPreviewProfile(doc)} className="text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200 px-3 py-1.5 rounded-lg">
-                      👤 Profil
-                    </button>
-                  )}
                   {doc.has_photo && (
                     <button type="button" onClick={() => onPreviewFront(doc)} className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700">
                       📷 Față

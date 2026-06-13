@@ -92,6 +92,20 @@ coverage.xml
 # Junk files from accidental shell commands
 0)
 FAIL
+1
+
+# Server output/error logs (orice nivel)
+*_err.txt
+*_out.txt
+*.err
+uvicorn_err.txt
+uvicorn_out.txt
+geocode_log.txt
+backend/coverage.json
+backend/_*.txt
+frontend/_*.txt
+frontend_err.txt
+frontend_out.txt
 
 # Local exploratory scripts (not part of the application)
 check_*.py
@@ -116,3 +130,8 @@ backend/keys/
 backend/keys/*.pem
 keys/
 keys/*.pem
+ssl/
+ssl/*.pem
+
+# Setari locale ale assistant-ului (nu intra in repo)
+.claude/

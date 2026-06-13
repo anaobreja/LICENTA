@@ -250,6 +250,7 @@ erDiagram
         decimal distance_from_origin_km
         datetime arrival_time
         datetime departure_time
+        bool is_commercial_stop
     }
 
     trains {
@@ -473,6 +474,8 @@ universitare.
 #### `routes` & `route_stops`
 Rute definite prin stația de origine, destinație și un lanț ordonat de opriri intermediare
 (`route_stops.stop_order`) cu distanțe kilometrice cumulative — necesare la calculul prețului.
+`is_commercial_stop` marchează dacă oprirea este comercială (pasagerii pot urca/coborî) sau
+tehnică/de tranzit — derivat din atributul `TipOprire='C'` al fiecărui `ElementTrasa` din XML-ul CFR.
 
 #### `trains`
 Trenurile fizice, asociate unui operator și unei rute. Tipul (`regio`, `interregio`, `intercity`,

@@ -1,7 +1,49 @@
 import { useEffect, useState } from 'react'
-import { getMyDocuments, submitIdentityValidationRequest, getDocumentPhotoBlobUrl, extractIdData, getUserProfile, getUserProfilePhotoBlobUrl, getMyCredentials } from '../services/api'
+import { Link } from 'react-router-dom'
+import { getMyDocuments, submitIdentityValidationRequest, getDocumentPhotoBlobUrl, extractIdData, getUserProfile, getUserProfilePhotoBlobUrl, getMyCredentials, updateProfile } from '../services/api'
+import StationCombobox from '../components/StationCombobox.jsx'
 import { useToast } from '../components/Toast.jsx'
 import { UNIVERSITATI } from '../constants/universities'
+
+// Componenta pentru thumbnail document - incarca blob URL cu auth header
+function DocumentThumbnail({ docId, side = 'front', alt, className, onError }) {
+  const [src, setSrc] = useState(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let blobUrl = null
+    let cancelled = false
+    getDocumentPhotoBlobUrl(docId, side)
+      .then((url) => {
+        if (cancelled) {
+          if (url) try { URL.revokeObjectURL(url) } catch (_) {}
+          return
+        }
+        blobUrl = url
+        setSrc(url)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFailed(true)
+          if (onError) onError()
+        }
+      })
+    return () => {
+      cancelled = true
+      if (blobUrl) try { URL.revokeObjectURL(blobUrl) } catch (_) {}
+    }
+  }, [docId, side])
+
+  if (failed || !src) {
+    return (
+      <div className={(className || '') + ' bg-slate-700 flex items-center justify-center text-xs text-slate-400'}>
+        {failed ? 'N/A' : '...'}
+      </div>
+    )
+  }
+  return <img src={src} alt={alt} className={className} />
+}
+
 
 function Documents() {
   const toast = useToast()
@@ -24,6 +66,7 @@ function Documents() {
   const [legitimationPhotoVerso, setLegitimationPhotoVerso] = useState(null)
   const [profilePhoto, setProfilePhoto] = useState(null)
   const [universityName, setUniversityName] = useState('')
+  const [homeStation, setHomeStation] = useState(null)
   const [yearOfStudy, setYearOfStudy] = useState('')
   const [viewingImage, setViewingImage] = useState(null)
   const [currentProfilePhotoUrl, setCurrentProfilePhotoUrl] = useState(null)
@@ -38,6 +81,18 @@ function Documents() {
         getMyCredentials().catch(() => []),
       ])
       setDocuments(documentsData || [])
+      // Gara de domiciliu vine din profil (setata user in /profile, sincronizata
+      // automat de backend la cumparare). Daca lipseste, userul trebuie sa o seteze.
+      if (profileData?.home_station?.station_id) {
+        setHomeStation({
+          station_id: profileData.home_station.station_id,
+          name: profileData.home_station.name || '',
+          city: profileData.home_station.city || '',
+          code: profileData.home_station.code || '',
+        })
+      } else {
+        setHomeStation(null)
+      }
       setMyCredentials(Array.isArray(creds) ? creds : [])
       setPhotoLocked(Array.isArray(creds) && creds.some(c => c.status === 'active'))
       if (profileData?.has_profile_photo && profileData?.user_id) {
@@ -87,6 +142,14 @@ function Documents() {
     if (source.ci_sex !== undefined) setCiSex(source.ci_sex || '')
     if (source.ci_address !== undefined) setCiAddress(source.ci_address || '')
     if (source.university_name) setUniversityName(source.university_name)
+    if (source.home_station_id && source.home_station_name) {
+      setHomeStation({
+        station_id: source.home_station_id,
+        name: source.home_station_name,
+        city: source.home_station_city || '',
+        code: source.home_station_code || '',
+      })
+    }
     // La reînnoire nu pre-completăm nr. legitimație (e nouă) sau anul (avansează)
     if (!isRenewal) {
       if (source.document_number_masked) setLegitimationNumberMasked(source.document_number_masked)
@@ -117,6 +180,7 @@ function Documents() {
     setLegitimationPhotoVerso(null)
     setProfilePhoto(null)
     setUniversityName('')
+    setHomeStation(null)
     setYearOfStudy('')
   }
 
@@ -154,6 +218,10 @@ function Documents() {
         setError('Selectează anul de studiu.')
         return
       }
+      if (!homeStation?.station_id) {
+        setError('Selecteaza gara ta de provenienta (necesara pentru ruta personala student).')
+        return
+      }
     }
 
     try {
@@ -170,6 +238,7 @@ function Documents() {
         ci_date_of_birth: ciDob,
         ci_sex: ciSex,
         ci_address: ciAddress,
+        home_station_id: homeStation?.station_id || '',
       })
 
       resetForm()
@@ -185,14 +254,12 @@ function Documents() {
 
   const formDisabled = isRenewal ? !renewalOpen : false
 
-  const handleViewImage = async (doc) => {
+  const handleViewImage = async (doc, side = 'front') => {
     try {
-      const blobUrl = await getDocumentPhotoBlobUrl(doc.id)
-      setViewingImage({ ...doc, photoBlobUrl: blobUrl })
-    } catch (err) {
-      console.error('Could not load image', err)
-      // Fallback: open modal with original path
-      setViewingImage(doc)
+      const url = await getDocumentPhotoBlobUrl(doc.id, side)
+      setViewingImage({ ...doc, photoBlobUrl: url, _customLabel: side === 'verso' ? 'Document verso' : 'Document fata' })
+    } catch (e) {
+      setMsg({ type: 'error', text: 'Nu am putut incarca poza ' + side + ': ' + e.message })
     }
   }
 
@@ -305,7 +372,7 @@ function Documents() {
             className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold px-4 py-3 rounded-xl transition text-base"
           >
             {extracting
-              ? <><span className="animate-spin inline-block">⟳</span> Se analizează CI... (prima rulare descarcă ~800MB)</>
+              ? <><span className="animate-spin inline-block">⟳</span> Se analizează CI... (poate dura 10–30 secunde)</>
               : scanned ? <>📷 Rescansează CI</> : <>📷 Scanează CI — extrage date automat</>}
           </button>
 
@@ -313,7 +380,7 @@ function Documents() {
 
           <div className="grid gap-3 md:grid-cols-2">
             <div>
-              <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">Nume complet (din CI)</label>
+              <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">Nume complet (din CI) <span className="text-red-500">*</span></label>
               <input
                 className="w-full border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-2 text-sm dark:bg-slate-900 dark:text-white"
                 placeholder="ex: Popescu Alexandru"
@@ -322,7 +389,7 @@ function Documents() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">Serie și număr CI</label>
+              <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">Serie și număr CI <span className="text-red-500">*</span></label>
               <input
                 className="w-full border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-2 text-sm dark:bg-slate-900 dark:text-white"
                 placeholder="ex: XZ969111"
@@ -331,7 +398,7 @@ function Documents() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">Data nașterii</label>
+              <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">Data nașterii <span className="text-red-500">*</span></label>
               <input
                 type="date"
                 className="w-full border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-2 text-sm dark:bg-slate-900 dark:text-white"
@@ -350,7 +417,7 @@ function Documents() {
               })()}
             </div>
             <div>
-              <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">Sex</label>
+              <label className="block text-xs font-semibold mb-1 text-slate-600 dark:text-slate-400">Sex <span className="text-red-500">*</span></label>
               <select
                 className="w-full border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-2 text-sm dark:bg-slate-900 dark:text-white"
                 value={ciSex}
@@ -387,7 +454,7 @@ function Documents() {
           <div className="space-y-3 mb-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-semibold mb-2 dark:text-white">Universitate</label>
+                <label className="block text-sm font-semibold mb-2 dark:text-white">Universitate <span className="text-red-500">*</span></label>
                 <select
                   className="w-full border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-2 dark:bg-slate-900 dark:text-white"
                   value={universityName === '' || UNIVERSITATI.includes(universityName) ? universityName : 'Alta universitate'}
@@ -417,7 +484,7 @@ function Documents() {
                 )}
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-2 dark:text-white">An de studiu</label>
+                <label className="block text-sm font-semibold mb-2 dark:text-white">An de studiu <span className="text-red-500">*</span></label>
                 <select
                   className="w-full border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-2 dark:bg-slate-900 dark:text-white"
                   value={yearOfStudy}
@@ -435,11 +502,51 @@ function Documents() {
                 </select>
               </div>
             </div>
+            <div className="mt-3">
+              <label className="block text-sm font-semibold mb-2 dark:text-white">
+                Gara de provenienta (pentru ruta personala) <span className="text-red-500">*</span>
+              </label>
+              {homeStation?.station_id ? (
+                <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold truncate text-emerald-900 dark:text-emerald-200">
+                      {homeStation.name}
+                    </div>
+                    <div className="text-xs text-emerald-700 dark:text-emerald-300 truncate">
+                      {homeStation.city} {homeStation.code ? `— ${homeStation.code}` : ''}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setHomeStation(null)}
+                    className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:underline shrink-0"
+                  >
+                    Schimbă
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <StationCombobox
+                    placeholder="Caută gara de domiciliu..."
+                    value={homeStation}
+                    onChange={async (s) => {
+                      setHomeStation(s)
+                      if (s?.station_id) {
+                        try { await updateProfile({ home_station_id: s.station_id }) } catch (_) {}
+                      }
+                    }}
+                  />
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Alege gara <strong>din județul tău</strong>, cât mai aproape de adresa din CI.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         <div className="mb-4">
-          <label className="block text-sm font-semibold mb-2 dark:text-white">Număr legitimație (mascat)</label>
+          <label className="block text-sm font-semibold mb-2 dark:text-white">Număr legitimație (mascat) <span className="text-red-500">*</span></label>
           <input
             className="w-full border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-2 dark:bg-slate-900 dark:text-white"
             placeholder="ex: ST******"
@@ -552,8 +659,79 @@ function Documents() {
                           {doc.university_name && (
                             <div className="col-span-2">Universitate: <strong>{doc.university_name}</strong></div>
                           )}
+                          {(doc.home_station_name || doc.home_station_id) && (
+                            <div className="col-span-2 mt-1 pt-1 border-t border-blue-100 dark:border-blue-900">
+                              Gara de proveniență:{' '}
+                              <strong>{doc.home_station_name || `Stație ID ${doc.home_station_id}`}</strong>
+                              {doc.home_station_city && doc.home_station_city !== doc.home_station_name && (
+                                <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">({doc.home_station_city})</span>
+                              )}
+                              {doc.home_station_code && (
+                                <span className="text-xs text-slate-400 dark:text-slate-500 ml-1">· {doc.home_station_code}</span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
+                      {/* Thumbnails: profil + fata + verso legitimatie */}
+                      <div className="border-t border-emerald-100 dark:border-emerald-900" />
+                      <div className="flex flex-wrap gap-3 items-end pt-1">
+                        {currentProfilePhotoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setViewingImage({ ...doc, _customImage: currentProfilePhotoUrl, _customLabel: 'Poza profil' })}
+                            className="group flex flex-col items-center gap-1"
+                            title="Click pentru zoom"
+                          >
+                            <img
+                              src={currentProfilePhotoUrl}
+                              alt="Poza profil"
+                              className="w-20 h-20 rounded-full border-2 border-emerald-700 object-cover group-hover:border-emerald-300 transition"
+                            />
+                            <span className="text-xs text-emerald-700 dark:text-emerald-300">Profil</span>
+                          </button>
+                        )}
+                        {(doc.has_front_image || doc.has_photo || doc.document_image_path) && (
+                          <button
+                            type="button"
+                            onClick={() => handleViewImage(doc, 'front')}
+                            className="group flex flex-col items-center gap-1"
+                            title="Click pentru zoom"
+                          >
+                            <DocumentThumbnail
+                              docId={doc.id}
+                              side="front"
+                              alt="Document fata"
+                              className="w-20 h-20 rounded-lg border-2 border-emerald-700 object-cover group-hover:border-emerald-300 transition"
+                            />
+                            <span className="text-xs text-emerald-700 dark:text-emerald-300">
+                              {doc.document_type === 'student_card' || doc.document_type === 'student_id'
+                                ? 'Legit. fata'
+                                : doc.document_type === 'passport' ? 'Pasaport' : 'CI fata'}
+                            </span>
+                          </button>
+                        )}
+                        {(doc.has_verso_image || doc.has_photo_verso || doc.document_image_path_verso) && (
+                          <button
+                            type="button"
+                            onClick={() => handleViewImage(doc, 'verso')}
+                            className="group flex flex-col items-center gap-1"
+                            title="Click pentru zoom"
+                          >
+                            <DocumentThumbnail
+                              docId={doc.id}
+                              side="verso"
+                              alt="Document verso"
+                              className="w-20 h-20 rounded-lg border-2 border-emerald-700 object-cover group-hover:border-emerald-300 transition"
+                            />
+                            <span className="text-xs text-emerald-700 dark:text-emerald-300">
+                              {doc.document_type === 'student_card' || doc.document_type === 'student_id'
+                                ? 'Legit. verso' : 'CI verso'}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+
                       {myCredentials.filter(c => c.status === 'active').length > 0 && (
                         <>
                           <div className="border-t border-emerald-100 dark:border-emerald-900" />
@@ -561,8 +739,7 @@ function Documents() {
                             <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">Valabilitate credențiale</div>
                             <div className="space-y-1">
                               {myCredentials.filter(c => c.status === 'active').map(c => (
-                                <div key={c.id} className="flex items-center justify-between text-sm">
-                                  <span className="text-slate-600 dark:text-slate-400">{c.credential_type}</span>
+                                <div key={c.id} className="flex items-center justify-end text-sm">
                                   <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                                     până la {formatDate(c.valid_until)}
                                   </span>
@@ -610,20 +787,82 @@ function Documents() {
                           {doc.university_name && (
                             <div className="col-span-2">Universitate: <strong>{doc.university_name}</strong></div>
                           )}
+                          {(doc.home_station_name || doc.home_station_id) && (
+                            <div className="col-span-2 mt-1 pt-1 border-t border-blue-100 dark:border-blue-900">
+                              Gara de proveniență:{' '}
+                              <strong>{doc.home_station_name || `Stație ID ${doc.home_station_id}`}</strong>
+                              {doc.home_station_city && doc.home_station_city !== doc.home_station_name && (
+                                <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">({doc.home_station_city})</span>
+                              )}
+                              {doc.home_station_code && (
+                                <span className="text-xs text-slate-400 dark:text-slate-500 ml-1">· {doc.home_station_code}</span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="inline-block bg-blue-200 dark:bg-blue-800 dark:text-blue-200 text-blue-800 text-xs font-semibold px-2 py-1 rounded">PENDING</span>
-                        {doc.document_image_path && (
-                          <button
-                            onClick={() => handleViewImage(doc)}
-                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                          >
-                            📷 Vezi poza legitimației
-                          </button>
-                        )}
-                      </div>
+                      <div className="space-y-3 pt-1">
+                          <div className="flex items-center justify-between">
+                            <span className="inline-block bg-blue-200 dark:bg-blue-800 dark:text-blue-200 text-blue-800 text-xs font-semibold px-2 py-1 rounded">{doc.status?.toUpperCase() || 'PENDING'}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-3 items-end">
+                            {currentProfilePhotoUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setViewingImage({ ...doc, _customImage: currentProfilePhotoUrl, _customLabel: 'Poza profil' })}
+                                className="group flex flex-col items-center gap-1"
+                                title="Click pentru zoom"
+                              >
+                                <img
+                                  src={currentProfilePhotoUrl}
+                                  alt="Poza profil"
+                                  className="w-20 h-20 rounded-full border-2 border-blue-700 object-cover group-hover:border-blue-300 transition"
+                                />
+                                <span className="text-xs text-blue-200 dark:text-blue-300">Profil</span>
+                              </button>
+                            )}
+                            {(doc.has_front_image || doc.has_photo || doc.document_image_path) && (
+                              <button
+                                type="button"
+                                onClick={() => handleViewImage(doc, 'front')}
+                                className="group flex flex-col items-center gap-1"
+                                title="Click pentru zoom"
+                              >
+                                <DocumentThumbnail
+                                  docId={doc.id}
+                                  side="front"
+                                  alt="Document fata"
+                                  className="w-20 h-20 rounded-lg border-2 border-blue-700 object-cover group-hover:border-blue-300 transition"
+                                />
+                                <span className="text-xs text-blue-200 dark:text-blue-300">
+                                  {doc.document_type === 'student_card' || doc.document_type === 'student_id'
+                                    ? 'Legit. fata'
+                                    : doc.document_type === 'passport' ? 'Pasaport' : 'CI fata'}
+                                </span>
+                              </button>
+                            )}
+                            {(doc.has_verso_image || doc.has_photo_verso || doc.document_image_path_verso) && (
+                              <button
+                                type="button"
+                                onClick={() => handleViewImage(doc, 'verso')}
+                                className="group flex flex-col items-center gap-1"
+                                title="Click pentru zoom"
+                              >
+                                <DocumentThumbnail
+                                  docId={doc.id}
+                                  side="verso"
+                                  alt="Document verso"
+                                  className="w-20 h-20 rounded-lg border-2 border-blue-700 object-cover group-hover:border-blue-300 transition"
+                                />
+                                <span className="text-xs text-blue-200 dark:text-blue-300">
+                                  {doc.document_type === 'student_card' || doc.document_type === 'student_id'
+                                    ? 'Legit. verso' : 'CI verso'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
                     </div>
                   ))}
                 </div>
@@ -637,7 +876,7 @@ function Documents() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white dark:bg-slate-950 rounded-2xl max-w-2xl w-full max-h-96 overflow-auto">
               <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                <h3 className="text-lg font-bold dark:text-white">{getDocumentTypeLabel(viewingImage.document_type)}</h3>
+                <h3 className="text-lg font-bold dark:text-white">{viewingImage._customLabel || getDocumentTypeLabel(viewingImage.document_type)}</h3>
                 <button
                   onClick={() => {
                     if (viewingImage?.photoBlobUrl) {
@@ -652,7 +891,7 @@ function Documents() {
               </div>
               <div className="p-4 flex justify-center">
                 <img
-                  src={viewingImage.photoBlobUrl || viewingImage.document_image_path}
+                  src={viewingImage._customImage || viewingImage.photoBlobUrl || viewingImage.document_image_path}
                   alt={getDocumentTypeLabel(viewingImage.document_type)}
                   className="max-w-full max-h-80 rounded-lg"
                 />

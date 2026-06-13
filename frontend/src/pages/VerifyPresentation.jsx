@@ -114,12 +114,14 @@ function VerifyPresentation() {
         return
       }
 
-      const scanner = new Html5Qrcode(readerId)
+      const scanner = new Html5Qrcode(readerId, {
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      })
       scannerRef.current = scanner
 
       await scanner.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
+        { fps: 15, qrbox: { width: 300, height: 300 } },
         async (decodedText) => {
           if (!mountedRef.current) {
             return
@@ -326,11 +328,10 @@ function VerifyPresentation() {
                 ? 'Tokenul este verificat local cu cheia publica Ed25519. Util in tunele sau zone fara semnal. Nu se poate marca tokenul ca folosit (anti-replay).'
                 : 'Token-ul este trimis serverului pentru validare. Implicit; ofera verificare anti-replay si revocare in timp real.'}
             </p>
-            {offlineMode && keyInfo && (
-              <p className="text-[11px] mt-2 font-mono text-amber-800 dark:text-amber-200">
-                kid: {keyInfo.kid} · descarcata: {new Date(keyInfo.fetched_at).toLocaleString('ro-RO')}
-              </p>
-            )}
+            {/* Detaliile cheii publice (kid, fetched_at) nu se afiseaza in UI:
+                sunt informatii tehnice de uz intern, pastrate doar pentru cache si
+                logica de refresh. Statusul cheii este indicat utilizatorului prin
+                culoarea barii (amber = offline cu cheie incarcata). */}
           </div>
           <div className="flex flex-col gap-2 shrink-0">
             <label className="inline-flex items-center gap-2 cursor-pointer">
@@ -400,8 +401,11 @@ function VerifyPresentation() {
           placeholder="card_..."
           required
         />
-        <button className="bg-slate-900 text-white px-4 py-2 rounded-xl hover:bg-slate-800" disabled={loading || scanning}>
-          {scanning ? 'Scanez poza...' : loading ? 'Verific...' : 'Verifica'}
+        <button
+          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl px-4 py-3 transition"
+          disabled={loading || scanning}
+        >
+          {scanning ? 'Scanez...' : loading ? 'Verific...' : 'Verifică manual'}
         </button>
       </form>
 

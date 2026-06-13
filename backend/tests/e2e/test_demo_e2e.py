@@ -60,6 +60,8 @@ def test_complete_demo_flow(client, upb_agent_token, train_verifier_token):
             "ci_name": "Demo User",
             "ci_date_of_birth": "2001-01-01",
             "ci_sex": "M",
+            "ci_address": "Str. Test, jud. Test",
+            "home_station_id": "1",
         },
         files={
             "legitimation_photo_front": ("front.png", create_test_image_bytes(), "image/png"),

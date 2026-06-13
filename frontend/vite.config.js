@@ -5,11 +5,14 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    host: true,
     allowedHosts: [
       'localhost',
       '127.0.0.1',
       '172.20.10.13',
-      'glance-handshake-episode.ngrok-free.dev'
+      '192.168.137.184',
+      'glance-handshake-episode.ngrok-free.dev',
+      '.devtunnels.ms'
     ],
     proxy: {
       '/api': {

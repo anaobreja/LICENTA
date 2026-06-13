@@ -171,6 +171,109 @@ def _get_train_between(from_station_id: int, to_station_id: int) -> dict | None:
 # Fixture-uri
 # ============================================================================
 
+def _seed_cluj_brasov_incremental(conn):
+    """
+    Adauga DOAR Cluj-Napoca + Brasov + ruta directa intre ele + ruta inversa
+    Bucuresti Nord -> Iasi, daca lipsesc. Idempotent. Folosit cand DB-ul de
+    test contine deja Iasi + Bucuresti Nord (seedate din tests/conftest.py).
+    """
+    op_id = conn.execute(text(
+        "SELECT operator_id FROM railway_operators WHERE code = 'CFR_DEFAULT'"
+    )).scalar()
+    if op_id is None:
+        return
+
+    # Ia ID-urile statiilor deja seedate in conftest (Iasi, Bucuresti Nord)
+    s_iasi = conn.execute(text(
+        "SELECT station_id FROM stations WHERE code = 'IS_DEF'"
+    )).scalar()
+    s_buc = conn.execute(text(
+        "SELECT station_id FROM stations WHERE code = 'BN_DEF'"
+    )).scalar()
+
+    # Ruta inversa: BUC Nord -> Iasi (pentru test discount pe directia opusa)
+    if s_iasi is not None and s_buc is not None:
+        route_rev_id = conn.execute(text("""
+            INSERT INTO routes (route_name, route_code, operator_id,
+                                origin_station_id, destination_station_id,
+                                total_distance_km)
+            VALUES ('Bucuresti Nord - Iasi', 'BN-IS-PRT', :op, :s1, :s2, 406)
+            ON CONFLICT (route_code) DO UPDATE SET route_name = EXCLUDED.route_name
+            RETURNING route_id
+        """), {"op": op_id, "s1": s_buc, "s2": s_iasi}).scalar()
+        train_rev_id = conn.execute(text("""
+            INSERT INTO trains (operator_id, route_id, train_number, train_type,
+                                capacity_seats, is_active)
+            VALUES (:op, :rt, 'IR1583-PRT', 'interregio', 280, TRUE)
+            ON CONFLICT (operator_id, train_number) DO UPDATE
+                SET train_type = EXCLUDED.train_type, is_active = TRUE
+            RETURNING train_id
+        """), {"op": op_id, "rt": route_rev_id}).scalar()
+        conn.execute(text("""
+            INSERT INTO route_stops (route_id, station_id, stop_order,
+                                     arrival_time, departure_time,
+                                     distance_from_origin_km)
+            VALUES
+                (:rt, :s1, 1, NULL,          '15:00'::TIME, 0),
+                (:rt, :s2, 2, '21:30'::TIME, NULL,          406)
+            ON CONFLICT (route_id, stop_order) DO UPDATE SET
+                arrival_time = EXCLUDED.arrival_time,
+                departure_time = EXCLUDED.departure_time
+        """), {"rt": route_rev_id, "s1": s_buc, "s2": s_iasi})
+        try:
+            conn.execute(text("SELECT generate_train_layout(:t)"), {"t": train_rev_id})
+        except Exception:
+            pass
+
+    s_cluj = conn.execute(text("""
+        INSERT INTO stations (code, name, city, country)
+        VALUES ('CJ_PRT', 'Cluj-Napoca', 'Cluj-Napoca', 'Romania')
+        ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+        RETURNING station_id
+    """)).scalar()
+    s_brasov = conn.execute(text("""
+        INSERT INTO stations (code, name, city, country)
+        VALUES ('BV_PRT', 'Brasov', 'Brasov', 'Romania')
+        ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+        RETURNING station_id
+    """)).scalar()
+
+    route_id = conn.execute(text("""
+        INSERT INTO routes (route_name, route_code, operator_id,
+                            origin_station_id, destination_station_id,
+                            total_distance_km)
+        VALUES ('Cluj-Napoca - Brasov', 'CJ-BV-PRT', :op, :s1, :s2, 273)
+        ON CONFLICT (route_code) DO UPDATE SET route_name = EXCLUDED.route_name
+        RETURNING route_id
+    """), {"op": op_id, "s1": s_cluj, "s2": s_brasov}).scalar()
+
+    train_id = conn.execute(text("""
+        INSERT INTO trains (operator_id, route_id, train_number, train_type,
+                            capacity_seats, is_active)
+        VALUES (:op, :rt, 'IR4321-PRT', 'interregio', 280, TRUE)
+        ON CONFLICT (operator_id, train_number) DO UPDATE
+            SET train_type = EXCLUDED.train_type, is_active = TRUE
+        RETURNING train_id
+    """), {"op": op_id, "rt": route_id}).scalar()
+
+    conn.execute(text("""
+        INSERT INTO route_stops (route_id, station_id, stop_order,
+                                 arrival_time, departure_time,
+                                 distance_from_origin_km)
+        VALUES
+            (:rt, :s1, 1, NULL,          '07:00'::TIME, 0),
+            (:rt, :s2, 2, '12:00'::TIME, NULL,          273)
+        ON CONFLICT (route_id, stop_order) DO UPDATE SET
+            arrival_time = EXCLUDED.arrival_time,
+            departure_time = EXCLUDED.departure_time
+    """), {"rt": route_id, "s1": s_cluj, "s2": s_brasov})
+
+    try:
+        conn.execute(text("SELECT generate_train_layout(:t)"), {"t": train_id})
+    except Exception:
+        pass
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _seed_railway_minimal():
     """
@@ -181,7 +284,11 @@ def _seed_railway_minimal():
     with _engine().begin() as conn:
         existing = conn.execute(text("SELECT COUNT(*) FROM stations")).scalar() or 0
         if existing > 0:
-            return  # DB cu date reale -> nu interferam
+            # DB-ul de test are deja Iasi + Bucuresti Nord seedate in conftest.
+            # Adaugam doar Cluj-Napoca + Brasov + ruta lor (lipsa in conftest)
+            # ca testele de discount pe alte rute sa aiba pe ce rula.
+            _seed_cluj_brasov_incremental(conn)
+            return
 
         # Insert: 4 statii + 1 operator + 2 rute + 2 trenuri + tarif brackets
         conn.execute(
@@ -566,7 +673,7 @@ class TestPersonalRouteDiscount:
         Cluj -> Brașov pentru un student cu home=Iași:
         NU se aplica discount (ruta nu corespunde traseului personal).
         """
-        brasov_id = _get_station_id("Braşov")
+        brasov_id = _get_station_id("Braşov") or _get_station_id("Brasov")
         if brasov_id is None:
             pytest.skip("Brașov nu exista in DB")
 

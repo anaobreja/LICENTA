@@ -7,7 +7,6 @@ import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Documents from './pages/Documents'
 import Notifications from './pages/Notifications'
-import Credentials from './pages/Credentials'
 import PresentIdentity from './pages/PresentIdentity'
 import VerifyPresentation from './pages/VerifyPresentation'
 import Profile from './pages/Profile'
@@ -15,6 +14,8 @@ import UniversityAgentDashboard from './pages/UniversityAgentDashboard'
 import Settings from './pages/Settings'
 import BuyTicket from './pages/BuyTicket'
 import MyTickets from './pages/MyTickets'
+import ReschedulePage from './pages/ReschedulePage'
+import Subscriptions from './pages/Subscriptions'
 import TravelHistory from './pages/TravelHistory'
 import ValidateTicket from './pages/ValidateTicket'
 import MapView from './pages/MapView'
@@ -141,15 +142,6 @@ function App() {
           />
 
           <Route
-            path="/credentials"
-            element={
-              <ProtectedRoute isAuthenticated={isAuthenticated} user={user} role="passenger">
-                <Credentials />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
             path="/present"
             element={
               <ProtectedRoute isAuthenticated={isAuthenticated} user={user} role="passenger">
@@ -172,6 +164,24 @@ function App() {
             element={
               <ProtectedRoute isAuthenticated={isAuthenticated} user={user} role="passenger">
                 <BuyTicket />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/tickets/reschedule"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated} user={user} role="passenger">
+                <ReschedulePage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/subscriptions"
+            element={
+              <ProtectedRoute isAuthenticated={isAuthenticated} user={user} role="passenger">
+                <Subscriptions />
               </ProtectedRoute>
             }
           />

@@ -744,6 +744,123 @@ See `tests/integration/test_profile_freeze.py`. Covers:
 
 ---
 
+## 4.2 Vulnerabilitati descoperite si reparate prin testare automata
+
+### Critical Fix: Privilege Escalation in Ticket Validation (FIXED)
+
+**Severity:** CRITICAL
+**Affected endpoint:** `POST /tickets/validate`
+**Discovered:** prin extinderea suite-ului de teste integration (sesiunea de
+coverage improvement, iunie 2026)
+**Fixed in:** commit `feat(security)` din `feat/postgres-migration`
+
+#### Descriere problema
+
+Endpoint-ul `/tickets/validate` (folosit de conductori la bord pentru a valida
+QR code-ul biletelor) **nu impunea verificarea rolului `train_verifier`**.
+Verificarea autentificarii era prezenta (`_extract_current_user`), dar lipsea
+filtrul de autorizare pe rol.
+
+Asta inseamna ca **orice utilizator autentificat** (inclusiv un pasager
+obisnuit) putea apela endpoint-ul si valida un QR token. Tipic atac:
+
+```http
+POST /tickets/validate HTTP/1.1
+Authorization: Bearer <passenger_jwt>
+Content-Type: application/json
+
+{"token": "<qr_token_furat>"}
+```
+
+Raspuns observat **inainte de fix**: `200 OK, {"result": "valid"}` urmat de
+marcarea token-ului ca `used` in `qr_tokens.used_at`.
+
+#### Impact
+
+1. **Bilet single-use poate fi "ars" de oricine** - un atacator care intercepteaza
+   un QR token poate apela `/tickets/validate` si marca biletul ca folosit, chiar
+   daca pasagerul real n-a apucat sa-l prezinte conductorului. Pasagerul real
+   primeste **al doilea apel ca `already_used`** si NU mai poate calatori.
+
+2. **Audit trail compromis** - validarile false sunt inregistrate in
+   tabela `validations` cu `conductor_id = passenger_id`, ceea ce arata ca
+   "pasagerul s-a validat singur" (caz fizic imposibil).
+
+3. **Privilege escalation chain** - daca sistemul extinde validate cu actiuni
+   privilegiate (de exemplu raportare statistica, blacklist), un atacator putea
+   abuza acelasi endpoint.
+
+#### Fix aplicat
+
+```python
+@router.post("/tickets/validate", response_model=ValidateTicketResponse)
+def validate_ticket(
+    payload: ValidateTicketRequest,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user = _extract_current_user(authorization, db)
+
+    # SECURITY FIX: doar conductorii (train_verifier) si adminii pot valida
+    # bilete. Inainte oricare user autentificat putea apela endpoint-ul.
+    user_role = normalize_role(user.get("role"))
+    if not has_role(user_role, ROLE_TRAIN_VERIFIER) and user_role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Doar conductorii sau adminii pot valida bilete.",
+        )
+
+    # ... rest of validation flow
+```
+
+#### Test de regresie strict
+
+```python
+def test_validate_passenger_role_rejected_403(self, client):
+    """
+    BUG #2 (REPARAT): pasagerii NU pot valida bilete.
+    Inainte de fix: orice user autentificat era acceptat.
+    Dupa fix: cere strict train_verifier sau admin -> 403 pentru passenger.
+    """
+    # ... seteaza un bilet valid, pasager incearca sa-l valideze
+    r = client.post("/tickets/validate", json={"token": qr_token}, headers=h)
+    assert r.status_code == 403, r.text
+```
+
+Test in `backend/tests/integration/test_ticket_validation.py::TestValidateTicket::test_validate_passenger_role_rejected_403`.
+
+#### Lectie pentru rest of codebase
+
+Auditat **toate endpoint-urile cu rol** (`_extract_current_user`) si confirmat
+ca au verificarea de rol unde este necesar. Pattern recomandat pentru viitor:
+
+```python
+# In loc de:
+user = _extract_current_user(...)
+# imediat dupa, daca actiunea e privilegiata:
+user_role = normalize_role(user.get("role"))
+if not has_role(user_role, ROLE_REQUIRED):
+    raise HTTPException(403, "Acces interzis.")
+```
+
+### False alarms investigate (NU au fost bug-uri)
+
+In aceeasi sesiune am investigat 5 alte ipoteze de vulnerabilitati care s-au
+dovedit a NU exista in cod (rezultat fals din teste cu path-uri/payload-uri
+incorecte):
+
+| Bug ipotetic | Status real | Verificare |
+|---|---|---|
+| `validate` accepta orice token (fallback ascuns) | NU exista | linia 798 verifica `if not row -> invalid` |
+| `password change` nu verifica current_password | NU exista | linia 304 apeleaza `verify_password` |
+| `password change` accepta parole scurte | NU exista | Pydantic `Field(min_length=6)` |
+| `profile-photo` accepta orice content_type | NU exista | `save_uploaded_image` valideaza `ALLOWED_IMAGE_TYPES` |
+| `export-data` arunca 500 KeyError | NU exista | bloc `try/except SQLAlchemyError` |
+
+Toate au fost confirmate cu teste live + lectura cod.
+
+---
+
 ## 5. Known Vulnerabilities & Gaps
 
 ### Critical Issues Summary

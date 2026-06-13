@@ -396,3 +396,95 @@ class TestExternalVerify:
         # Acum get_key_id() returneaza alta cheie
         with pytest.raises(ValueError, match="(?i)semnatura"):
             isolated_keys.verify_token(token_a)
+
+
+# ============================================================================
+# 9. decode_token_unchecked — cai de eroare (linii 341-354)
+# ============================================================================
+
+class TestDecodeTokenUnchecked:
+
+    def test_non_string_raises(self, isolated_keys):
+        with pytest.raises(ValueError, match="(?i)str"):
+            isolated_keys.decode_token_unchecked(None)  # type: ignore
+
+    def test_no_separator_raises(self, isolated_keys):
+        with pytest.raises(ValueError, match="(?i)separator|format"):
+            isolated_keys.decode_token_unchecked("noseparator")
+
+    def test_too_many_segments_raises(self, isolated_keys):
+        with pytest.raises(ValueError, match="(?i)segment|format"):
+            isolated_keys.decode_token_unchecked("a.b.c")
+
+    def test_invalid_base64_raises(self, isolated_keys):
+        with pytest.raises(ValueError, match="(?i)corupt|base64|payload"):
+            isolated_keys.decode_token_unchecked("!!!.@@@")
+
+    def test_valid_payload_decoded_without_sig_check(self, isolated_keys):
+        """decode_token_unchecked returneaza payload-ul fara sa verifice semnatura."""
+        original = _payload()
+        token = isolated_keys.sign_payload(original)
+        result = isolated_keys.decode_token_unchecked(token)
+        assert result == original
+
+    def test_tampered_payload_still_decoded(self, isolated_keys):
+        """
+        decode_token_unchecked NU verifica semnatura — payload-ul modificat
+        se decodeaza daca e JSON valid (asta e intentionat: doar formatuk e testat).
+        """
+        import base64
+        import json as _json
+
+        # Construim manual un token cu payload modificat + semnatura originala
+        # (semnatura nu se potriveste, dar decode_unchecked ignora asta)
+        payload_modified = _payload(sub="hacker")
+        canonical = _json.dumps(payload_modified, sort_keys=True,
+                                separators=(',', ':')).encode()
+        # Padding base64url corect
+        b64 = base64.urlsafe_b64encode(canonical).rstrip(b"=").decode()
+        fake_sig = "A" * 86  # 64 bytes in base64url fara padding = 86 chars
+        fake_token = f"{b64}.{fake_sig}"
+
+        result = isolated_keys.decode_token_unchecked(fake_token)
+        assert result["sub"] == "hacker"
+
+
+# ============================================================================
+# 10. verify_token — cai de eroare de format (linii 275-305)
+# ============================================================================
+
+class TestVerifyTokenEdgeCases:
+
+    def test_empty_payload_segment_raises(self, isolated_keys):
+        """
+        Token cu payload gol '.<sig>' -> ValueError 'payload gol'.
+        Semnatura trebuie sa fie exact 64 bytes (86 chars b64url).
+        """
+        import base64
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        # Cream o semnatura de 64 bytes valida pentru payload gol
+        priv = isolated_keys.get_private_key()
+        sig_bytes = priv.sign(b"")
+        sig_b64 = base64.urlsafe_b64encode(sig_bytes).rstrip(b"=").decode()
+        token = f".{sig_b64}"
+
+        with pytest.raises(ValueError, match="(?i)gol|empty|payload"):
+            isolated_keys.verify_token(token)
+
+    def test_non_dict_payload_raises(self, isolated_keys):
+        """Payload JSON valid dar nu e obiect (e.g., lista) -> ValueError."""
+        import base64
+        import json as _json
+
+        # Semnam o lista (nu un dict)
+        canonical = _json.dumps([1, 2, 3], sort_keys=True,
+                                 separators=(',', ':')).encode()
+        priv = isolated_keys.get_private_key()
+        sig = priv.sign(canonical)
+        b64_payload = base64.urlsafe_b64encode(canonical).rstrip(b"=").decode()
+        b64_sig = base64.urlsafe_b64encode(sig).rstrip(b"=").decode()
+        token = f"{b64_payload}.{b64_sig}"
+
+        with pytest.raises(ValueError, match="(?i)obiect|dict|payload"):
+            isolated_keys.verify_token(token)

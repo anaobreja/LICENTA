@@ -1,0 +1,1250 @@
+\documentclass[12pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[romanian]{babel}
+\renewcommand\familydefault{\sfdefault}
+
+\usepackage[margin=2.54cm]{geometry}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+
+% formatting sections and subsections
+\usepackage{textcase}
+\usepackage[titletoc, title]{appendix}
+\usepackage{titlesec}
+\titleformat{\chapter}{\large\bfseries\MakeUppercase}{\thechapter}{2ex}{}[\vspace*{-1.5cm}]
+\titleformat*{\section}{\large\bfseries}
+\titleformat*{\subsection}{\large\bfseries}
+\titleformat*{\subsubsection}{\large\bfseries}
+
+\usepackage{chngcntr}
+\counterwithout{figure}{chapter}
+\counterwithout{table}{chapter}
+\counterwithout{equation}{chapter}
+
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage[bookmarks,unicode,hidelinks]{hyperref}
+\usepackage{array}
+\usepackage{paralist}
+\usepackage{verbatim}
+\usepackage{subfig}
+\usepackage{enumitem}
+\setlist{noitemsep}
+
+\usepackage{fancyhdr}
+\pagestyle{empty}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\lhead{}\chead{}\rhead{}
+\lfoot{}\cfoot{\thepage}\rfoot{}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  tabsize=2,
+  showstringspaces=false,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  stringstyle=\color{orange!70!black},
+}
+
+\newcommand{\HeaderLineSpace}{-0.25cm}
+\newcommand{\UniTextRO}{UNIVERSITATEA POLITEHNICA DIN BUCUREȘTI \\[\HeaderLineSpace]
+FACULTATEA DE AUTOMATICĂ ȘI CALCULATOARE \\[\HeaderLineSpace]
+DEPARTAMENTUL DE CALCULATOARE\\}
+\newcommand{\DiplomaRO}{PROIECT DE DIPLOMĂ}
+\newcommand{\AdvisorRO}{Coordonator științific:}
+\newcommand{\BucRO}{BUCUREȘTI}
+
+\newcommand{\UniTextEN}{UNIVERSITY POLITEHNICA OF BUCHAREST \\[\HeaderLineSpace]
+FACULTY OF AUTOMATIC CONTROL AND COMPUTERS \\[\HeaderLineSpace]
+COMPUTER SCIENCE AND ENGINEERING DEPARTMENT\\}
+\newcommand{\DiplomaEN}{DIPLOMA PROJECT}
+\newcommand{\AdvisorEN}{Thesis advisor:}
+\newcommand{\BucEN}{BUCHAREST}
+
+\newcommand{\frontPage}[6]{
+\begin{titlepage}
+\begin{center}
+{\Large #1}
+\vspace{50pt}
+\begin{tabular}{p{6cm}p{4cm}}
+\includegraphics[scale=0.8]{pics/upb-logo.jpg} &
+  \includegraphics[scale=0.5,trim={14cm 11cm 2cm 5cm},clip=true]{pics/cs-logo.pdf}
+\end{tabular}
+
+\vspace{105pt}
+{\Huge #2}\\
+\vspace{40pt}
+{\Large #3}\\ \vspace{0pt}
+{\Large #4}\\
+\vspace{40pt}
+{\LARGE \Name}\\
+\end{center}
+\vspace{60pt}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}p{6cm}r}
+&{\large\textbf{#5}}\vspace{10pt}\\
+&{\large \Advisor}
+\end{tabular*}
+\vspace{20pt}
+\begin{center}
+{\large\textbf{#6}}\\
+\vspace{0pt}
+{\normalsize \Year}
+\end{center}
+\end{titlepage}
+}
+
+\newcommand{\frontPageRO}{\frontPage{\UniTextRO}{\DiplomaRO}{\ProjectTitleRO}{\ProjectSubtitleRO}{\AdvisorRO}{\BucRO}}
+\newcommand{\frontPageEN}{\frontPage{\UniTextEN}{\DiplomaEN}{\ProjectTitleEN}{\ProjectSubtitleEN}{\AdvisorEN}{\BucEN}}
+
+\linespread{1.15}
+\setlength\parindent{0pt}
+\setlength\parskip{.28cm}
+
+\newcommand{\AbstractPage}{
+\begin{titlepage}
+\textbf{\large SINOPSIS}\par
+\AbstractRO\par\vfill
+\textbf{\large ABSTRACT}\par
+\AbstractEN \vfill
+\end{titlepage}
+}
+
+\newcommand{\ThanksPage}{
+\begin{titlepage}
+{\noindent \large\textbf{MULȚUMIRI}}\\
+\Thanks
+\end{titlepage}
+}
+
+
+\newcommand{\ProjectTitleRO}{Sistem digital de autentificare și gestiune a identității pentru transportul feroviar}
+\newcommand{\ProjectSubtitleRO}{}
+\newcommand{\ProjectTitleEN}{Digital Authentication and Identity Management System for Railway Transportation}
+\newcommand{\ProjectSubtitleEN}{}
+\newcommand{\Name}{Ana-Maria Obreja}
+\newcommand{\Advisor}{[Coordonator - de completat]}
+\newcommand{\Year}{2026}
+
+\title{Proiect de diplomă}
+\author{\Name}
+\date{\Year}
+
+\newcommand{\AbstractRO}{Lucrarea de față prezintă proiectarea și implementarea unei platforme web pentru gestionarea identității digitale și a biletelor și abonamentelor feroviare, adresată în principal studenților care beneficiază de facilități de transport. Sistemul implementat permite cumpărarea de bilete cu rezervare de loc, gestionarea abonamentelor, verificarea digitală a identității studențești de către agenți universitari autorizați și planificarea rutelor cu una sau mai multe schimbări. Arhitectura aplicației este bazată pe separarea completă între server (FastAPI, Python) și client (React), cu persistența datelor în PostgreSQL. Baza de date conține orarul real CFR 2025--2026, importat din fișierele XML publicate de Informatica Feroviară S.A. pe platforma data.gov.ro (licență CC-BY 4.0), cu 2.103 trenuri, 1.818 stații și 46.501 opriri. Coordonatele GPS ale stațiilor (1.471 din 1.818) au fost geocodificate automat prin corelarea numelor din baza de date cu nodurile feroviare din OpenStreetMap via Overpass API. Harta interactivă redă traseele prin secvența reală a stațiilor intermediare cu coordonate GPS, vizualizate cu tile-uri OpenRailwayMap. Sistemul de credențiale digitale, bazat pe roluri și fluxuri de verificare între pasager, agent universitar și backend, constituie nucleul inovativ al aplicației, biletele emise conțin coduri QR cu verificare single-use prin server, iar cardul digital de identitate suportă verificare offline prin semnătură Ed25519. Sistemul include de asemenea autentificare cu doi factori (TOTP/MFA), extragere automată a datelor din cartea de identitate prin OCR și parser MRZ, calcul automat al emisiilor CO\textsubscript{2} economisite și politici de înghețare a datelor personale după verificarea identității. Rezultatele demonstrează viabilitatea unui astfel de sistem integrat care poate complementa soluțiile existente oferite de operatorii feroviari naționali.}
+
+\newcommand{\AbstractEN}{This thesis presents the design and implementation of a web platform for digital identity management and railway ticket booking, primarily targeting students benefiting from transportation subsidies. The implemented system allows ticket purchasing with seat reservation, subscription management, digital verification of student credentials by authorized university agents, and automatic multi-leg trip planning. The application architecture follows a strict client-server separation, with a FastAPI (Python) backend, a React frontend, and PostgreSQL for data persistence. The database contains the real CFR 2025--2026 timetable, imported from XML files officially published by Informatica Feroviară S.A. on the data.gov.ro platform (CC-BY 4.0 license), comprising 2,103 trains, 1,818 stations, and 46,501 stops. GPS coordinates for 1,471 of 1,818 stations were geocoded automatically by matching station names against OpenStreetMap railway nodes via the Overpass API. The interactive map renders routes through the real sequence of GPS-tagged intermediate stations, displayed over OpenRailwayMap tiles. The digital credentials system, based on roles and verification flows between passenger, university agent, and backend, constitutes the innovative core of the application; issued tickets contain single-use QR codes validated server-side, while the digital identity card supports offline verification via Ed25519 signatures. Additional security features include TOTP-based multi-factor authentication, automatic data extraction from identity documents via OCR and MRZ parsing, CO\textsubscript{2} savings tracking, and personal data freeze policies after identity verification. The results demonstrate the viability of such an integrated system that can complement existing solutions offered by national railway operators.}
+
+\newcommand{\Thanks}{Mulțumesc coordonatorului meu pentru îndrumare și sprijin pe parcursul elaborării acestei lucrări. Mulțumesc familiei mele pentru răbdare și încurajare. Mulțumesc colegilor care au testat aplicația și au oferit feedback valoros în procesul de dezvoltare.}
+
+\begin{document}
+
+\frontPageRO
+\frontPageEN
+
+\begingroup
+\linespread{1}
+\tableofcontents
+\endgroup
+
+\AbstractPage
+\ThanksPage
+
+
+\chapter{Introducere}\pagestyle{fancy}
+
+\section{Context}
+
+Transportul în comun feroviar este una dintre modalitățile de transport cu cel mai mare impact în România, care este de amenea foarte benefică atât pentru mediu, cât și pentru bugetul cetățenilor. Deservește milioane de pasageri, dintre care o proporție semnificativă o reprezintă studenții. Aceștia beneficiază prin lege de reduceri semnificative la bilete (90\% pe ruta de domiciliu și reduceri suplimentare în funcție de tipul de abonament). Cu toate acestea, procesul de obținere și validare a acestor reduceri se face în mare parte analogic: legitimația fizică, vizată anual la secretariatele universităților, este prezentată la ghișeele CFR sau inspectorilor de tren, obligatoriu, alături de un act de identitate.
+
+Digitalizarea serviciilor de transport feroviar a cunoscut o creștere semnificativă în Europa occidentală, datorită operatorilor precum Deutsche Bahn (Germania), SNCF (Franța) sau Eurostar, care au implementat sisteme complete, complexe și care sunt utilizate zi cu zi, cu integrare mobilă, verificare biometrică și reduceri automate pe baza cardurilor de identitate digitale \cite{db2023digital}. România, a făcut pași în această direcție prin lansarea aplicației mobile și a platformei online, cu ajutorul operatorului național CFR România, însă acestea prezintă limitări în ceea ce privește gestionarea facilităților studențești și interfeței cu utilizatorul, motiv care poate duce la supra-taxare când nu deține documentele necesare, deși, în teorie, studentul are dreptul deplin la reducere.
+
+Contextul academic al proiectului este important. Creșterea numărului de studenți care folosesc transportul în comun, cu precădere transportul feroviar, între orașul de proveniență și universitate, nevoia comansării timpului petrecut la ghișee și oportunitatea de a integra identitatea digitală cu sistemele de bilete, abonamente, constituie motivații solide pentru un astfel de sistem. Totodată, punerea la dispoziție a tehnologiilor web (REST API, JWT, React, PostgreSQL) oferă instrumente mature și performante pentru propunerea acestei viziuni.
+
+Încă un aspect relevant este tendința europeană de a digitaliza identitatea. Directiva eIDAS \cite{jwt2015} și inițiativele de identitate electronică sunt un punct de plecare plauzibil spre sisteme în care calitatea de student, de beneficiar al unei reduceri sau de titular al unui abonament să fie verificabilă direct, fără să fie nevoie de documente, deoarece eligibilitatea a fost confirmată de un agent universitar. În acest context, o platformă care integrează fluxul de verificare între instituția academică și operatorul feroviar este un pas pertinent spre această viziune. Astfel, se demonstrează că arhitecturile moderne web sunt benefice în a susține astfel de scenarii în contextul transportului public din România.
+
+
+\section{Problema}
+
+Problema centrală abordată de lucrarea în cauză este absența unui mecanism digital integrat care să permită:
+
+\begin{enumerate}
+  \item \textbf{Verificarea automată a eligibilității} pasagerilor pentru reduceri studențești, fără prezentarea documentelor fizice;
+  \item \textbf{Rezervarea locului și plata online} cu aplicarea corectă a tarifelor reduse, inclusiv pentru călătorii cu mai mulți pasageri unde unii sunt studenți și alții nu;
+  \item \textbf{Planificarea rutelor complexe} (cu schimbări) cu afișarea geometriei reale a traseului feroviar pe o hartă interactivă;
+  \item \textbf{Gestionarea abonamentelor} feroviare cu integrarea reducerilor studențești.
+\end{enumerate}
+
+Problemele concrete identificate în sistemele existente includ: imposibilitatea aplicării automate a reducerii la cumpărarea online fără o legitimație digitală verificată, lipsa unui sistem de verificare descentralizat și absența vizualizării hărții feroviare cu trasee reale.
+
+\section{Obiective}
+
+Obiectivele principale ale proiectului sunt:
+
+\begin{itemize}
+  \item \textbf{O1}: Implementarea unui sistem de autentificare și gestionare a rolurilor (pasager, agent universitar, agent de tren) cu token JWT și politici de acces granulare.
+  \item \textbf{O2}: Dezvoltarea unui motor de planificare a călătoriei multi-leg (cu până la 2 schimbări) bazat pe algoritmul BFS cu constrângeri temporale.
+  \item \textbf{O3}: Crearea unui flux de verificare a credențialelor studențești prin intermediul agenților universitari, cu emiterea de credențiale digitale cu termen de valabilitate.
+  \item \textbf{O4}: Implementarea unui sistem de rezervare a locurilor cu protecție împotriva concurenței (seat holds cu expirare la 5 minute).
+  \item \textbf{O5}: Dezvoltarea unui modul de hartă interactivă a rețelei feroviare care redă traseele prin secvența reală a stațiilor intermediare, cu coordonate GPS geocodificate din OpenStreetMap via Overpass API.
+  \item \textbf{O6}: Gestionarea abonamentelor feroviare cu aplicarea corectă a tarifelor în funcție de tipul pasagerului și ruta acoperită.
+\end{itemize}
+
+\section{Soluția propusă}
+
+Soluția propusă este o aplicație web cu arhitectură client-server, compusă din trei componente principale: un backend REST, un frontend React și o bază de date relațională, integrate într-un flux coerent de la autentificare până la emiterea biletului cu cod QR.
+
+\textbf{Backend-ul} este implementat în Python folosind framework-ul FastAPI, expunând un API REST structurat pe module funcționale: autentificare (JWT cu roluri: pasager, agent universitar, administrator), utilizatori, trenuri, bilete, abonamente, locuri, credențiale și hartă. Motorul de planificare a călătoriei utilizează algoritmul BFS cu constrângeri temporale pentru a identifica itinerare cu până la două schimbări, respectând ferestre de conexiune de 15 minute până la 3 ore. Rezervarea locurilor este protejată împotriva concurenței prin mecanismul \textit{seat hold} cu expirare automată la 5 minute. Persistența datelor este asigurată de PostgreSQL, iar comunicarea cu baza de date se realizează prin SQLAlchemy (ORM).
+
+\textbf{Frontend-ul} este o aplicație React (JSX) cu pagini dedicate fiecărui flux funcțional: căutare și cumpărare bilete (inclusiv pentru mai mulți pasageri cu calcul automat al reducerilor), biletele mele cu opțiune de reprogramare, abonamente, hartă feroviară interactivă, credențiale studențești și gestionarea agenților universitari. Aplicația folosește React Router pentru navigare și React-Leaflet pentru vizualizarea hărții cu tile-uri OpenRailwayMap.
+
+\textbf{Infrastructura} este minimalistă și portabilă: un script \texttt{run.py} pornește simultan serverul FastAPI pe portul 8000 și servește fișierele statice ale frontend-ului compilat pe portul 8765.
+
+Elementul inovativ central este \textbf{sistemul de identitate digitală studențească}: pasagerii uploadează dovezi ale statutului de student, agenții universitari (personalul secretariatelor) le verifică prin portalul dedicat și emit credențiale digitale cu termen de valabilitate configurat. La cumpărarea unui bilet, backend-ul verifică automat dacă titularul deține o credențială activă și aplică tariful redus corespunzător. Biletul emis conține un cod QR cu datele călătoriei, verificabil offline de personalul de tren fără conectivitate la server.
+
+\section{Rezultatele obținute}
+
+În urma implementării, platforma oferă un flux complet de la înregistrare la cumpărarea biletului și generarea codului QR. Baza de date conține orarul real CFR 2025--2026 importat din surse oficiale (2.103 trenuri active, 1.818 stații, 46.501 opriri), ceea ce face ca toate rezultatele de mai jos să fie calculate pe date reale, nu pe date de test. Scenariile acoperite sunt:
+
+\begin{itemize}
+  \item \textbf{Autentificare și roluri}: înregistrare și autentificare cu token JWT, cu suport pentru trei roluri distincte (pasager, agent universitar, verificator tren), fiecare cu acces restricționat la funcționalitățile proprii.
+
+  \item \textbf{Planificare rută}: căutarea itinerarelor directe sau cu maximum două schimbări între oricare două stații din rețeaua CFR, cu sortare după durată totală și afișarea stațiilor de transfer și a orelor de plecare/sosire.
+
+  \item \textbf{Cumpărare bilet}: achiziția unui bilet pentru un segment de tren sau a unui bilet combinat pentru o călătorie cu maximum două schimbări, cu rezervare opțională de loc din harta interactivă a vagonului pentru fiecare segment și generarea unui cod QR unic per segment, verificabil offline.
+
+  \item \textbf{Pasageri multipli}: cumpărarea biletelor pentru mai mulți pasageri dintr-o singură sesiune, cu aplicarea corectă a reducerilor numai titular sau de abonament, însoțitorii plătesc prețul integral.
+
+  \item \textbf{Reprogramare}: modificarea unui bilet existent pe un tren alternativ pentru aceeași rută, fără a cumpăra din nou.
+
+  \item \textbf{Abonamente}: achiziția unui abonament lunar sau trimestrial pe o rută specifică, cu calculul automat al economiei realizate față de cumpărarea de bilete individuale și aplicarea automată a prețului zero la călătoriile acoperite.
+
+  \item \textbf{Identitate digitală studențească}: încărcarea documentelor de student, urmărirea stării cererii (în așteptare, aprobată, respinsă) și primirea unei credențiale digitale cu termen de valabilitate emise de agentul universitar; reducerile se aplică automat la toate biletele cumpărate cât timp credențiala este activă.
+
+  \item \textbf{Card digital de identitate}: generarea unui card digital cu cod QR care poate fi prezentat personalului de tren pentru verificarea identității și a dreptului la reducere, fără a fi necesară prezentarea documentelor fizice.
+
+  \item \textbf{Hartă feroviară interactivă}: vizualizarea întregii rețele CFR cu 1.471 stații geocodificate, căutarea stațiilor prin câmpuri de text cu autocompletare, selectarea a două stații și afișarea traseului real prin toate stațiile intermediare cu culori distincte pe fiecare segment.
+
+  \item \textbf{Portal agent universitar}: panoul de administrare al agentului universitar pentru vizualizarea, aprobarea sau respingerea cererilor de legitimație studențească ale pasagerilor.
+
+  \item \textbf{Profil și date personale}: personalizarea profilului cu fotografie, schimbarea parolei și exportul datelor personale în format JSON (conformitate GDPR), precum și istoricul complet al călătoriilor efectuate.
+
+  \item \textbf{Autentificare cu doi factori (MFA/TOTP)}: activarea autentificării în doi pași prin aplicații TOTP (Google Authenticator, Authy) — la autentificare, după parolă, se solicită un cod de 6 cifre cu valabilitate de 30 de secunde.
+
+  \item \textbf{Extragere automată date CI}: la uploadul cărții de identitate, sistemul extrage automat numele, CNP-ul și data nașterii prin OCR și parser MRZ, pre-populând profilul fără introducere manuală.
+
+  \item \textbf{Statistici de călătorie și emisii CO\textsubscript{2}}: calculul automat al kilometrilor parcurși, al emisiilor CO\textsubscript{2} economisite față de deplasarea cu mașina și echivalentul în copaci, plus un sistem de realizări (achievements) deblocate pe baza istoricului de călătorii.
+
+  \item \textbf{Rambursare pe trepte CFR}: calculul automat al sumei rambursate la anularea unui bilet: 100\% cu mai mult de 24h înainte de plecare, 50\% între 1 minut și 24h, 0\% după plecare.
+\end{itemize}
+
+\section{Structura lucrării}
+
+\textbf{Capitolul 2} prezintă analiza cerințelor funcționale și nefuncționale ale platformei, identificate prin analiza scenariilor de utilizare și a limitărilor soluțiilor existente. Sunt definiți actorii sistemului și fluxurile lor principale de interacțiune.
+
+\textbf{Capitolul 3} conține studiul soluțiilor existente pe piața națională și internațională de ticketing feroviar, urmat de o analiză comparativă a tehnologiilor alese față de alternativele disponibile, cu argumente tehnice pentru fiecare decizie.
+
+\textbf{Capitolul 4} prezintă arhitectura soluției propuse: schema bazei de date, diagramele de componente, fluxurile principale de date între module și deciziile arhitecturale majore.
+
+\textbf{Capitolul 5} detaliază implementarea fiecărui modul semnificativ: algoritmul de planificare a călătoriei, mecanismul de rezervare cu hold, sistemul de credențiale, calculul tarifelor cu reduceri, geocodificarea stațiilor și vizualizarea traseelor pe hartă.
+
+\textbf{Capitolul 6} evaluează sistemul prin scenarii de testare funcționale, comparații cu soluțiile existente și analiza performanței componentelor critice.
+
+\textbf{Capitolul 7} sintetizează contribuțiile proiectului, limitele identificate și direcțiile de dezvoltare ulterioară.
+
+
+\chapter{Analiza Cerințelor}
+
+\section{Identificarea actorilor}
+
+Sistemul definește trei tipuri de actori cu roluri distincte:
+
+\textbf{Pasagerul} (rol \texttt{passenger}) este utilizatorul final al platformei. El poate căuta trenuri, cumpăra bilete, gestiona abonamentele, vizualiza biletele active cu datele utilizatorului (nume, vagon, loc), alături de QR-ul de validare, reprograma călătorii și consulta harta rețelei feroviare. Pasagerii pot să-și încarce dovezi ale statutului de student pentru a obține credențiale digitale care le acordă reduceri. De asemenea, au posibilitatea să exporte datele GDRP, să își personalizeze profilul, să vada starea actuală a cererilor de validare a documentelor. Cumpărarea biletelor sau a abonamentelor este separată de validarea documentelor de student, reducerile fiind aplicate după ce sunt aprobate acestea. Pasagerul poate face tranzacții chiar dacă nu are documente validate.
+
+\textbf{Agentul universitar} (rol \texttt{university\_agent}) este un reprezentant al unei instituții de învățământ superior (secretariat, decanat). El are acces la un panou de administrare unde poate vedea cererile de verificare a legitimațiilor studențești, poate aproba sau respinge cererile și poate emite credențiale digitale cu o perioadă de valabilitate specificată.
+
+\textbf{Agentul de tren} (rol \texttt{train\_verifier}) este personalul CFR responsabil cu verificarea biletelor în tren. El are acces la două funcționalități dedicate: \textbf{Validarea biletului}: scanarea sau introducerea manuală a codului QR de pe bilet, cu verificarea offline a semnăturii HMAC și afișarea datelor călătoriei (pasager, tren, vagon, loc, rută); \textbf{Verificarea identității}: scanarea cardului digital de identitate al pasagerului, care confirmă identitatea și dreptul la reducere fără a fi necesare documente fizice. Agentul de tren nu are acces la datele altor utilizatori, bilete sau funcționalități administrative.
+
+
+\section{Cerințe funcționale}
+
+\subsection{Autentificare și gestionarea contului}
+
+\begin{itemize}
+  \item \textbf{CF-01}: Sistemul trebuie să permită înregistrarea unui utilizator cu email și parolă, cu validarea unicității adresei de email.
+  \item \textbf{CF-02}: Sistemul trebuie să permită autentificarea prin email și parolă, returnând un token JWT cu durată de valabilitate configurabilă.
+  \item \textbf{CF-03}: Token-ul JWT trebuie să conțină rolul utilizatorului și să fie validat la fiecare cerere autentificată.
+  \item \textbf{CF-04}: Utilizatorul trebuie să poată schimba parola furnizând parola curentă și noua parolă.
+  \item \textbf{CF-04b}: Sistemul trebuie să suporte autentificare cu doi factori (TOTP/MFA): activare prin secret partajat, confirmare cu cod de 6 cifre și blocare autentificare fără cod TOTP când MFA este activat.
+\end{itemize}
+
+\subsection{Căutarea și cumpărarea biletelor}
+
+\begin{itemize}
+  \item \textbf{CF-05}: Sistemul trebuie să permită căutarea trenurilor directe sau cu maximum 2 schimbări între oricare două stații, pentru o dată specificată.
+  \item \textbf{CF-06}: Rezultatele căutării trebuie sortate după durata totală a călătoriei, cu indicarea numărului de schimbări și a stațiilor de transfer.
+  \item \textbf{CF-07}: Sistemul trebuie să calculeze prețul biletului ținând cont de distanță, tipul trenului, statutul de student al pasagerului și existența unui abonament activ.
+  \item \textbf{CF-08}: La cumpărarea unui bilet pentru mai mulți pasageri, reducerea studențească se aplică \textit{exclusiv} titularului contului (pasagerul principal), nu și însoțitorilor.
+  \item \textbf{CF-09}: Pasagerul trebuie să poată selecta locul din harta vagonului înainte de finalizarea achiziției.
+  \item \textbf{CF-10}: Sistemul trebuie să genereze un cod QR unic pentru fiecare segment de bilet (leg), scanabil de inspectori.
+\end{itemize}
+
+\subsection{Rezervarea locurilor}
+
+\begin{itemize}
+  \item \textbf{CF-11}: Sistemul trebuie să permită rezervarea temporară (hold) a unui loc pentru maximum 5 minute, timp în care locul nu poate fi rezervat de alt utilizator.
+  \item \textbf{CF-12}: La expirarea hold-ului fără confirmare, locul trebuie eliberat automat.
+  \item \textbf{CF-13}: Harta locurilor trebuie să reflecte în timp real starea fiecărui loc: liber, rezervat temporar de utilizatorul curent, rezervat de alt utilizator, sau vândut.
+\end{itemize}
+
+\subsection{Abonamente}
+
+\begin{itemize}
+  \item \textbf{CF-14}: Pasagerul poate achiziționa abonamente pe o rută specifică (stație plecare — stație destinație) cu durate de 1 lună sau 3 luni.
+  \item \textbf{CF-15}: La calculul prețului unui bilet pe ruta acoperită de un abonament activ, prețul pentru titularul contului devine 0 (abonamentul acoperă călătoria).
+  \item \textbf{CF-16}: Sistemul trebuie să afișeze starea abonamentelor (activ, expirat, anulat) cu datele de valabilitate și economia totală realizată.
+\end{itemize}
+
+\subsection{Credențiale studențești}
+
+\begin{itemize}
+  \item \textbf{CF-17}: Pasagerul poate încărca o dovadă a calității de student (document scanat sau fotografie).
+  \item \textbf{CF-18}: Agentul universitar poate vizualiza toate cererile pendinte pentru instituția sa și poate aproba sau respinge fiecare cerere.
+  \item \textbf{CF-19}: La aprobare, sistemul emite automat o credențială digitală cu o perioadă de valabilitate specificată de agent.
+  \item \textbf{CF-20}: Credențialele active sunt verificate automat la calculul prețului biletelor.
+  \item \textbf{CF-20b}: La uploadul documentului de identitate, sistemul trebuie să extragă automat datele (nume, CNP, data nașterii) prin OCR și parser MRZ, pre-populând formularul de profil.
+  \item \textbf{CF-20c}: După verificarea identității de către agentul universitar, datele personale critice (CNP, nume, data nașterii) trebuie să fie înghețate și nemodificabile până la expirarea credențialei.
+\end{itemize}
+
+\subsection{Harta feroviară}
+
+\begin{itemize}
+  \item \textbf{CF-21}: Harta trebuie să afișeze toate stațiile cu coordonate GPS disponibile, cu diferențiere vizuală pentru centrele universitare.
+  \item \textbf{CF-22}: La selectarea a două stații pe hartă sau prin câmpurile de căutare, sistemul trebuie să calculeze și să afișeze ruta optimă prin secvența reală a stațiilor intermediare.
+  \item \textbf{CF-23}: Traseul feroviar trebuie redat ca polilinie prin coordonatele GPS ale stațiilor intermediare, în ordinea din mersul CFR, cu filtrarea automată a stațiilor geocodificate greșit.
+\end{itemize}
+
+\section{Cerințe nefuncționale}
+
+\textbf{Securitate}: Parolele sunt stocate hash-uite cu bcrypt. Token-urile JWT sunt validate la fiecare endpoint protejat. Accesul la datele altor utilizatori este interzis prin politici de autorizare la nivel de rând (pasagerul vede doar propriile bilete și abonamente).
+
+\textbf{Consistență}: Operațiunile de hold și cumpărare a locurilor sunt atomice la nivel de bază de date, prevenind vânzarea dublă a aceluiași loc.
+
+\textbf{Performanță}: API-ul de planificare a călătoriei utilizează un cache per-request pentru interogările repetitive la baza de date, reducând numărul de query-uri SQL de la O($N^3$) la O($N$) pentru o rută cu 2 schimbări.
+
+\textbf{Mentenabilitate}: Codul backend este organizat în module distincte (routers, services, core), iar frontend-ul separă logica API în servicii reutilizabile.
+
+\section{Cazuri de utilizare principale}
+
+Tabelul~\ref{tab:usecases} sumarizează principalele cazuri de utilizare identificate.
+
+\begin{table}[ht]\small\linespread{1}
+\caption{Cazuri de utilizare principale}
+\label{tab:usecases}
+\begin{tabular}{l p{5cm} l p{4cm}}
+\textbf{ID} & \textbf{Descriere} & \textbf{Actor} & \textbf{Precondiție} \\\hline
+UC-01 & Căutare trenuri și cumpărare bilet & Pasager & Autentificat \\
+UC-02 & Rezervare loc din harta vagonului & Pasager & Tren selectat \\
+UC-03 & Reprogramare bilet & Pasager & Bilet activ \\
+UC-04 & Cumpărare abonament & Pasager & Autentificat \\
+UC-05 & Încărcare legitimație studențească & Pasager & Autentificat \\
+UC-06 & Verificare legitimație și emitere credențială & Agent universitar & Cerere pendinte \\
+UC-07 & Vizualizare hartă și rută feroviară & Pasager & Autentificat \\
+UC-08 & Vizualizare bilet cu cod QR & Pasager & Bilet cumpărat \\
+UC-09 & Activare MFA/TOTP & Pasager & Autentificat \\
+UC-10 & Upload CI cu extragere OCR+MRZ & Pasager & Autentificat \\
+UC-11 & Verificare Rail Digital Card (offline/online) & Agent tren & Autentificat \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\chapter{Studiu de Piață și Tehnologii Folosite}
+
+\section{Soluții existente}
+
+\subsection{CFR Călători - aplicație oficială}
+
+Operatorul național CFR Călători pune la dispoziție o platformă web (\texttt{cfrcalatori.ro}) și o aplicație mobilă pentru cumpărarea biletelor. Punctele forte includ disponibilitatea tuturor trenurilor și rutelor din rețeaua CFR, posibilitatea de cumpărare online și reducerile pentru abonamentele de tip \textit{multi-trip}. Limitările principale sunt:
+\begin{itemize}
+  \item \textbf{Absența verificării digitale a legitimației studențești}: reducerile se aplică doar la prezentarea documentului fizic la ghișeu sau în tren;
+  \item \textbf{Interfața utilizator depășită}: experiența de cumpărare este fragmentată și dificilă pe dispozitive mobile;
+  \item \textbf{Harta feroviară absentă}: nu există o componentă de vizualizare a rețelei sau a traseelor;
+  \item \textbf{Lipsa rezervării de loc}: pentru categoriile de tren mai accesibile (Regio, InterRegio), nu este disponibilă rezervarea locului.
+\end{itemize}
+
+\subsection{Trenul.ro și agregatori terți}
+
+Servicii terțe precum \texttt{trenul.ro} sau \texttt{infofer.ro} oferă informații despre orare, întârzieri și trasee, dar nu permit cumpărarea biletelor. Ele adresează parțial nevoia de planificare a călătoriei, fără a integra componenta comercială sau cea de identitate digitală.
+
+\subsection{Sisteme europene, Deutsche Bahn Navigator}
+
+DB Navigator, aplicația Deutsche Bahn, este un punct de referință pentru calitatea experienței utilizator în ticketing feroviar \cite{db2023digital}. Funcționalitățile sale relevante includ: integrare cu BahnCard (card de reduceri digital), hartă interactivă a rețelei, planificator multi-modal și bilete descărcabile offline ca PDF. Limitarea în contextul nostru este că abordează o rețea mai densă și mai digitalizată, unde identitatea pasagerului este deja verificată electronic.
+
+\subsection{Eurostar și Railcard digital}
+
+Eurostar și National Rail (UK) oferă carduri de reducere digitale (16-17 Railcard, Student Railcard) emise și verificate complet online \cite{nationalrail2022}. Modelul este relevant pentru lucrarea de față deoarece demonstrează viabilitatea fluxului de verificare a eligibilității și emitere de credențiale digitale cu reduceri automate.
+
+\section{Comparație cu soluția propusă}
+
+Tabelul~\ref{tab:comparison} prezintă o comparație sintetică a funcționalităților principale.
+
+\begin{table}[ht]\small\linespread{1}
+\caption{Comparație funcționalități}
+\label{tab:comparison}
+\begin{tabular}{l c c c c}
+\textbf{Funcționalitate} & \textbf{CFR} & \textbf{DB Nav.} & \textbf{Railcard} & \textbf{Propus} \\\hline
+Cumpărare bilete online & Da & Da & Da & Da \\
+Rezervare loc & Parțial & Da & Da & Da \\
+Reducere studențească digitală & Nu & Nu & Da & Da \\
+Verificare instituție academică & Nu & Nu & Nu & Da \\
+Hartă cu trasee reale & Nu & Da & Nu & Da \\
+Cod QR bilet & Da & Da & Da & Da \\
+Planificare multi-leg & Da & Da & Da & Da \\
+Abonament cu reducere automată & Parțial & Da & Da & Da \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Tehnologii alese și justificare}
+
+\subsection{Backend: FastAPI vs. alternative}
+
+Pentru implementarea serverului REST au fost luate în considerare trei variante principale:
+
+\textbf{FastAPI} (Python) a fost ales datorită generării automate a documentației OpenAPI/Swagger, validării automate a datelor de intrare prin Pydantic, performanțelor comparabile cu Node.js (datorită naturii asincrone), și ecosistemului bogat de librării Python pentru criptografie, procesare date și integrări \cite{fastapi2023}.
+
+\textbf{Django REST Framework} ar fi adus un ORM mai matur și un sistem de administrare built-in, dar overhead-ul configurării și lipsa nativă de async la nivel de endpoint l-au exclus pentru un proiect cu accent pe API REST.
+
+\textbf{Express.js} (Node.js) ar fi oferit performanțe ridicate și ecosistemul npm, dar necesitatea unui singur limbaj (Python) pentru backend, date și scripturi de migrare a constituit un avantaj decisiv pentru FastAPI.
+
+\subsection{Frontend: React vs. alternative}
+
+\textbf{React} a fost ales pentru maturitatea ecosistemului, modelul de componente reutilizabile și disponibilitatea bibliotecilor specializate (React-Leaflet pentru hărți, React Router pentru navigare). Alternativa Vue.js ar fi oferit o curbă de învățare mai ușoară, dar ecosistemul mai restrâns pentru componente de hărți interactive a constituit un dezavantaj.
+
+\subsection{Baza de date: PostgreSQL}
+
+\textbf{PostgreSQL} a fost ales față de MySQL sau MongoDB pentru suportul nativ al tipurilor geografice, tranzacțiile ACID complete (esențiale pentru operațiunile de hold pe locuri), extensiile avansate (indexare, full-text search) și performanța la query-uri complexe cu JOIN-uri multiple. MongoDB ar fi simplificat modelul de date pentru documente (credențiale, bilete), dar ar fi complicat interogările relaționale (rute, stații, orare).
+
+\subsection{Harta interactivă: Leaflet + OpenStreetMap}
+
+\textbf{Leaflet} cu tile-uri OpenStreetMap a fost ales față de Google Maps API din considerente de cost (Google Maps are un model freemium cu limite restrictive) și de acces la datele OSM brute prin Overpass API, esențiale pentru redarea geometriei reale a căilor ferate. Alternativa Mapbox ar fi oferit tile-uri mai estetice dar cu limitări similare de cost și acces la date.
+
+\subsection{Autentificare: JWT}
+
+Token-urile \textbf{JWT (JSON Web Token)} permit o arhitectură stateless, fără sesiuni server-side, simplificând scalabilitatea orizontală. Alternativa sesiunilor cu cookie-uri (Redis/Memcached) ar fi adăugat complexitate infrastructurală nejustificată pentru dimensiunea proiectului.
+
+
+\chapter{Soluția Propusă — Arhitectura Sistemului}
+
+\section{Arhitectura generală}
+
+Sistemul urmează o arhitectură client-server cu separare strictă între nivelul de prezentare (React SPA), nivelul de logică aplicativă (FastAPI) și nivelul de date (PostgreSQL).
+
+Comunicarea între frontend și backend se realizează exclusiv prin cereri HTTP REST la adresa \texttt{http://localhost:8000/api/...}. Fiecare cerere autentificată include un header \texttt{Authorization: Bearer <token>}, iar backend-ul validează token-ul și extrage identitatea utilizatorului înainte de execuția logicii de business.
+
+Scriptul \texttt{run.py} pornește simultan cele două servere: serverul FastAPI (Uvicorn) pe portul 8000 și un server HTTP simplu pe portul 8765 care servește directorul \texttt{frontend/dist/} (output-ul compilat al aplicației React cu Vite).
+
+\section{Schema bazei de date}
+
+Baza de date conține 15 tabele principale organizate în jurul entităților centrale ale domeniului feroviar și ale sistemului de identitate digitală.
+
+Tabelele principale și relațiile lor sunt:
+
+\textbf{users}: stochează datele de cont (email, parolă hash, rol, timestamps). Un utilizator poate avea mai multe bilete, abonamente și credențiale.
+
+\textbf{stations}: stochează stațiile feroviare cu coordonate GPS (latitude, longitude), codul CFR unic și indicatorul \texttt{is\_university\_hub} pentru centrele universitare.
+
+\textbf{trains} și \textbf{routes}: reprezintă trenurile active cu numărul, tipul (regio, interregio, intercity) și ruta asociată. Ruta (route) definește secvența ordonată de stații prin tabelul \textbf{route\_stops}, cu orele de sosire/plecare și distanța de la origine.
+
+\textbf{tickets}: containerul principal al unei achiziții. Reține traseul de ansamblu (stația de plecare a primului segment și stația de destinație a ultimului), prețul total, statusul și datele pasagerului. Un bilet simplu (un singur tren) are exact un \textbf{ticket\_leg} copil; un bilet combinat pentru o călătorie cu schimbare are doi sau trei copii.
+
+\textbf{ticket\_legs}: segmentele individuale dintr-o achiziție. Fiecare rând reține trenul, stațiile și data pentru un segment, locul rezervat (\texttt{seat\_id}), prețul segmentului și un cod QR propriu (\texttt{qr\_token} + \texttt{qr\_token\_hash}). Conductorul scanează QR-ul segmentului activ, nu al biletului container. Câmpul \texttt{leg\_order} asigură ordinea segmentelor în cadrul călătoriei.
+
+\textbf{seats} și \textbf{seat\_holds}: locurile fizice din vagoane, cu starea curentă (liber, held, sold) și holdurile temporare cu timestamp de expirare.
+
+\textbf{subscriptions}: abonamentele pasagerilor, cu ruta acoperită, perioada de valabilitate și tipul (lunar, trimestrial).
+
+\textbf{student\_documents} și \textbf{credentials}: documentele uploadate de studenți pentru verificare, respectiv credențialele digitale emise după aprobare, cu tipul credențialei și data expirării.
+
+\textbf{university\_agents}: leagă utilizatorii cu rol de agent de o universitate specifică, permițând filtrarea cererilor relevante pentru fiecare instituție.
+
+\section{Structura modulelor backend}
+
+Backend-ul este organizat în patru directoare principale:
+
+\begin{itemize}
+  \item \texttt{app/core/}: configurare, conexiune baza de date (SessionLocal), securitate (JWT encode/decode, bcrypt)
+  \item \texttt{app/routers/}: un fișier per domeniu funcțional (auth, users, trains, tickets, seats, subscriptions, credentials, map)
+  \item \texttt{app/services/}: logică reutilizabilă extrasa din routere: \texttt{trip\_planner.py} (algoritmul de planificare), \texttt{qr\_generator.py} (generare coduri QR)
+  \item \texttt{app/models/}: modele SQLAlchemy pentru fiecare tabel
+\end{itemize}
+
+\section{Structura frontend}
+
+Frontend-ul React este organizat în pagini (\texttt{src/pages/}) și componente reutilizabile (\texttt{src/components/}). Comunicarea cu API-ul este centralizată în \texttt{src/services/api.js}, care expune funcții asincrone cu gestionarea erorilor și injecția automată a token-ului JWT.
+
+Paginile principale sunt:
+\begin{itemize}
+  \item \texttt{BuyTicket.jsx}: fluxul de căutare și cumpărare bilete (căutare trenuri, selecție pasageri, harta locurilor, confirmare)
+  \item \texttt{MyTickets.jsx}: vizualizarea biletelor active cu modal de boarding pass și cod QR
+  \item \texttt{Subscriptions.jsx}: gestionarea abonamentelor cu tab-uri (Active, Expirate, Anulate)
+  \item \texttt{MapView.jsx}: harta interactivă a rețelei feroviare
+  \item \texttt{ReschedulePage.jsx}: reprogramarea unui bilet pe un tren alternativ
+  \item \texttt{UniversityAgentDashboard.jsx}: panoul agentului universitar pentru verificarea documentelor
+\end{itemize}
+
+\section{Fluxuri principale de date}
+
+\subsection{Fluxul de cumpărare bilet}
+
+Pașii fluxului sunt: (1) utilizatorul introduce stațiile și data, (2) frontend-ul apelează \texttt{GET /trains/search}, (3) backend-ul apelează \texttt{plan\_trips()} și returnează itinerarele sortate, (4) utilizatorul selectează un tren și un loc, (5) frontend-ul apelează \texttt{POST /seats/hold} pentru rezervarea temporară, (6) utilizatorul confirmă, iar (7) \texttt{POST /tickets/buy} finalizează achiziția, eliberând hold-ul și creând biletul cu codul QR.
+
+\subsection{Fluxul de verificare a credențialelor}
+
+Pasagerul uploadează un document (\texttt{POST /credentials/upload}), agentul universitar îl vede în dashboard-ul său și apelează \texttt{POST /credentials/\{id\}/verify} cu valabilitatea propusă, iar sistemul emite o credențială activă. La următoarea cumpărare de bilet, \texttt{POST /tickets/quote} verifică automat credențialele active și aplică reducerea.
+
+
+\chapter{Detalii de Implementare}
+
+\section{Algoritmul de planificare a călătoriei}
+
+Modulul \texttt{trip\_planner.py} implementează un algoritm BFS modificat cu constrângeri temporale pentru găsirea itinerarelor optime între două stații, cu maximum 2 schimbări.
+
+\subsection{Structura algoritmului}
+
+Algoritmul este structurat în trei pași secvențiali:
+
+\textbf{Pasul 1 — Călătorii directe}: pentru stația de plecare $A$ și stația de destinație $B$, se identifică toate trenurile care opresc în $A$ și ajung ulterior în $B$ pe aceeași rută, în ziua specificată.
+
+\textbf{Pasul 2 — O schimbare ($A \to C \to B$)}: pentru fiecare tren din pasul 1 care oprește într-o stație intermediară $C$, se caută trenuri care pleacă din $C$ spre $B$ cu o fereastră de transfer de 15-180 de minute.
+
+\textbf{Pasul 3 — Două schimbări ($A \to C_1 \to C_2 \to B$)}: executat doar dacă nu s-au găsit suficiente rezultate în pașii 1 și 2, cu o limită de 500 combinații intermediare pentru a preveni explozia combinatorică.
+
+Rezultatele sunt sortate după durata totală a călătoriei (inclusiv timpii de așteptare la schimbări), cu tie-breaker pe numărul de schimbări.
+
+\subsection{Optimizarea performanței prin cache}
+
+Fără optimizare, algoritmul efectuează interogări repetitive la baza de date pentru aceleași rute și stații. Un cache per-request (dicționar Python) reduce drastică numărul de query-uri:
+
+\begin{lstlisting}[language=Python, caption=Cache per-request în trip\_planner.py]
+def _trains_passing_station(db, station_id, travel_date,
+                             min_departure_minutes=None,
+                             _cache=None):
+    cache_key = ("trains", station_id)
+    if _cache is not None and cache_key in _cache:
+        all_rows = _cache[cache_key]
+    else:
+        rows = db.execute(text("""
+            SELECT t.train_id, t.train_number, t.train_type,
+                   rs.stop_order, rs.departure_time, ...
+            FROM trains t
+            JOIN route_stops rs ON rs.route_id = t.route_id
+            WHERE rs.station_id = :sid AND t.is_active = TRUE
+            ORDER BY rs.departure_time
+        """), {"sid": station_id}).mappings().all()
+        all_rows = [dict(r) for r in rows]
+        if _cache is not None:
+            _cache[cache_key] = all_rows
+    # filtram in Python dupa min_departure_minutes
+    ...
+\end{lstlisting}
+
+Această optimizare este esențială deoarece algoritmul cu 2 schimbări poate apela \texttt{\_trains\_passing\_station} pentru aceeași stație de sute de ori în evaluarea combinațiilor.
+
+\subsection{Calculul duratei pentru trenuri de noapte}
+
+O subtilitate importantă este tratarea trenurilor care traversează miezul nopții. Fără corecție, un tren care pleacă la 23:30 și sosește la 01:15 ar fi calculat cu durată negativă. Corectarea se face prin adăugarea a 1440 de minute (24h) când sosirea este numeric mai mică decât plecarea:
+
+\begin{lstlisting}[language=Python, caption=Corectie durata tren de noapte]
+duration = arr_min - dep_min
+if duration < 0:
+    duration += 1440  # trenul ajunge in ziua urmatoare
+\end{lstlisting}
+
+\section{Sistemul de rezervare a locurilor}
+
+\subsection{Modelul datelor}
+
+Locurile sunt stocate în tabelul \texttt{seats} cu câmpurile: \texttt{train\_id}, \texttt{car\_number}, \texttt{car\_class}, \texttt{row}, \texttt{letter} (A/B/C/D), \texttt{is\_window}. Starea unui loc la o dată specifică este determinată prin tabelul \texttt{seat\_holds} (rezervări temporare) și \texttt{ticket\_legs} (bilete finale).
+
+\subsection{Logica de hold}
+
+La apelul \texttt{POST /seats/hold}, sistemul verifică că locul nu este deja rezervat sau în hold de alt utilizator, apoi inserează o înregistrare în \texttt{seat\_holds} cu \texttt{expires\_at = NOW() + 5 minutes}. La polling-ul hărții (la 5 secunde), hold-urile expirate sunt filtrate, iar locul reapare ca disponibil.
+
+Concurența este gestionată prin constrângeri \texttt{UNIQUE} la nivelul bazei de date: tabelele \texttt{seat\_reservations} și \texttt{ticket\_seats} au câte o constrângere \texttt{UNIQUE(seat\_id, travel\_date)}, astfel că a doua inserare pentru același loc și dată generează automat o eroare de unicitate (PostgreSQL error 23505), propagată ca HTTP 409 Conflict către client. Aceasta este concurență optimistă: nu se blochează rândul la citire, ci se detectează conflictul la scriere:
+
+\begin{lstlisting}[language=Python, caption=Gestionare conflict de rezervare prin UNIQUE constraint]
+try:
+    db.execute(text("""
+        INSERT INTO seat_reservations (seat_id, travel_date, user_id, expires_at)
+        VALUES (:sid, :td, :uid, NOW() + interval '5 minutes')
+    """), {...})
+    db.commit()
+except IntegrityError:
+    db.rollback()
+    raise HTTPException(409, "Locul nu mai este disponibil")
+\end{lstlisting}
+
+\section{Calculul prețului și aplicarea reducerilor}
+
+\subsection{Logica de tarifare}
+
+Prețul de bază al unui bilet se calculează în funcție de distanța rutei și tipul trenului (coeficienți diferiți pentru Regio, InterRegio, InterCity). Reducerile se aplică în ordine de prioritate:
+
+\begin{enumerate}
+  \item \textbf{Abonament activ pe rută}: prețul titularului devine 0 — abonamentul acoperă integral biletul;
+  \item \textbf{Credențiale studențești active}: reducere 50\% pentru titularul contului;
+  \item \textbf{Fără reduceri}: prețul integral pentru toți pasagerii.
+\end{enumerate}
+
+\subsection{Regula pentru pasageri multipli}
+
+O cerință importantă este că reducerile (studențești sau prin abonament) se aplică \textbf{exclusiv} titularului contului, nu și însoțitorilor. Distincția se face prin câmpul \texttt{passenger\_name} din tabelul \texttt{tickets}: dacă este NULL, biletul aparține titularului; dacă conține un nume, aparține unui însoțitor care plătește prețul integral.
+
+\begin{lstlisting}[language=Python, caption=Aplicare reducere selectiva in buy\_ticket]
+is_self_ticket = (current_name is None)
+apply_subscription = (_covering_sub is not None
+                      and is_self_ticket)
+if is_self_ticket:
+    ticket_price = price        # cu reducere student
+    ticket_discount = discount
+else:
+    ticket_price = base_price   # pret integral
+    ticket_discount = 0.0
+\end{lstlisting}
+
+\section{Harta feroviară interactivă}
+
+\subsection{Geocodificarea stațiilor CFR}
+
+Baza de date CFR conține 1.818 stații identificate prin cod și nume, fără coordonate GPS. Pentru a putea afișa stațiile pe hartă și a trasa rute vizuale, a fost implementat un script de geocodificare automată \texttt{geocode\_stations\_v2.py}.
+
+Procesul funcționează în trei pași. În primul pas, se descarcă din Overpass API toate nodurile cu atribut \texttt{railway=station}, \texttt{halt} sau \texttt{stop} din bounding box-ul României (latitudine 44--48.5°N, longitudine 20--30°E), obținând circa 2.000 de noduri OSM cu coordonate GPS.
+
+\begin{lstlisting}[language=Python, caption=Interogare Overpass API pentru statii feroviare din Romania]
+query = """
+[out:json][timeout:90];
+(
+  node["railway"~"station|halt|stop"]["name"](44.0,20.0,48.5,30.0);
+  way["railway"~"station|halt"]["name"](44.0,20.0,48.5,30.0);
+);
+out center;
+"""
+\end{lstlisting}
+
+În al doilea pas, se construiește un index de potrivire: numele fiecărui nod OSM este normalizat prin decompoziție NFKD (eliminarea diacriticelor), transformare în minuscule și eliminarea sufixelor tehnice specifice nomenclatorului CFR (\texttt{Hm.}, \texttt{Ram.}, \texttt{Triaj}, \texttt{Nord}, \texttt{Sud} etc.):
+
+\begin{lstlisting}[language=Python, caption=Normalizarea numelor pentru potrivire CFR-OSM]
+def normalize(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = s.lower().strip()
+    for suffix in [" hm.", " ram.", " triaj", " nord", " sud",
+                   " vest", " est", " calatori"]:
+        if s.endswith(suffix):
+            s = s[:-len(suffix)].strip()
+    return re.sub(r"\s+", " ", s)
+\end{lstlisting}
+
+În al treilea pas, fiecare stație CFR fără GPS este căutată în index printr-o strategie multi-nivel:
+
+\begin{enumerate}
+  \item \textbf{Potrivire exactă} — șirul normalizat CFR există direct în indexul OSM;
+  \item \textbf{Potrivire scurtă} — se elimină ultimul cuvânt (ex. \texttt{"buzau ram"} $\to$ \texttt{"buzau"});
+  \item \textbf{Primul cuvânt unic} — dacă primul cuvânt returnează exact un candidat OSM;
+  \item \textbf{Variantă cu \textit{Gară}} — se încearcă \texttt{"[nume] gara"} și \texttt{"[nume]-gara"} (detaliat mai jos);
+  \item \textbf{Fallback Nominatim} — geocodare text-liber pentru stațiile fără match OSM.
+\end{enumerate}
+
+La succes, se actualizează coloana \texttt{latitude}/\texttt{longitude} în tabelul \texttt{stations}. Rezultatul final după toate pasurile: \textbf{1.807 din 1.816 stații} (99.5\%) au primit coordonate GPS. Cele 9 rămase fără GPS sunt stații din afara granițelor României (Vidin, Kapitanovci) și ramificații tehnice fără denumire de localitate, care nu apar în nicio bază de date geografică publică.
+
+\textbf{Problema nomenclaturii CFR vs.\ OSM.}
+CFR utilizează în XML denumiri prescurtate ale stațiilor --- de exemplu \texttt{Lehliu} în loc de \texttt{Lehliu-Gară}. În OpenStreetMap, stațiile feroviare sunt înregistrate sub forma completă (\textit{Lehliu Gară, Călărași}), în timp ce entitățile administrative ale localităților omonime apar fără sufixul \textit{Gară}. Prin urmare, potrivirea exactă a șirului \texttt{"lehliu"} nu găsește niciun nod feroviar, iar fallback-ul Nominatim returnează centrul administrativ al comunei (coordonate incorecte, cu eroare de 13~km față de gară).
+
+Soluția adoptată în pasul~4 al funcției \texttt{best\_match\_simple()} încearcă explicit variantele \texttt{"[nume] gara"} și \texttt{"[nume]-gara"}, precum și orice cheie OSM care \textit{începe cu} prefixul \texttt{"[nume] gara"}:
+
+\begin{lstlisting}[language=Python, caption=Pasul 4 -- varianta cu sufix Gara pentru statii CFR prescurtate]
+# Pas 4: CFR prescurteaza "Lehliu-Gara" -> "Lehliu";
+# OSM pastreaza denumirea completa.
+for gara_key in [norm_name + " gara", norm_name + "-gara"]:
+    if gara_key in exact_idx:
+        lat, lon, osm_name = exact_idx[gara_key][0]
+        return (lat, lon), f"gara-suffix:{osm_name}"
+# Potrivire prefix: "lehliu gara, calarasi" incepe cu "lehliu gara"
+gara_prefix = norm_name + " gara"
+for key, entries in exact_idx.items():
+    if key.startswith(gara_prefix) and entries:
+        lat, lon, osm_name = entries[0]
+        return (lat, lon), f"gara-prefix:{osm_name}"
+\end{lstlisting}
+
+Prin această strategie, \texttt{Lehliu} este asociat corect cu nodul OSM \textit{Lehliu Gară, Călărași} la coordonatele \texttt{(44.4258°N, 26.8628°E)}, eliminând eroarea de plasare pe centrul comunei.
+
+\subsection{Vizualizarea traseului prin stații reale}
+
+Endpoint-ul \texttt{GET /map/route-geometry} primește ID-urile stației de plecare și destinație, rulează algoritmul BFS pentru a găsi cel mai bun itinerar și returnează, pentru fiecare leg al rutei, lista ordonată a tuturor stațiilor intermediare cu coordonatele GPS disponibile.
+
+Frontend-ul construiește polilinia prin funcția \texttt{buildLegLines()}, care extrage punctele GPS în ordinea din mersul CFR și le pasează componentei \texttt{Polyline} din React-Leaflet:
+
+\begin{lstlisting}[language=JavaScript, caption=Constructia poliliniei prin statiile intermediare reale]
+function buildLegLines(route) {
+  if (!route?.legs?.length) return []
+  return route.legs.map((leg, i) => {
+    const allPts = (leg.stops || [])
+      .filter(s => s.lat != null && s.lon != null)
+      .map(s => [s.lat, s.lon])
+    const pts = filterOutliers(allPts)
+    return { pts, color: LEG_COLORS[i % LEG_COLORS.length] }
+  }).filter(l => l.pts.length >= 2)
+}
+\end{lstlisting}
+
+Deoarece geocodificarea automată prin potrivire de nume nu este perfectă --- unele stații primesc coordonatele unui nod OSM cu același nume normalizat dar în altă locație geografică --- a fost necesară implementarea unui filtru de outlieri.
+
+\subsection{Filtrarea stațiilor geocodificate greșit}
+
+Funcția \texttt{filterOutliers()} parcurge secvențial punctele GPS și aplică două criterii de eliminare.
+
+\textbf{Pasul 1 — salt catastrofal.} Dacă distanța Haversine față de punctul anterior acceptat depășește 200~km, punctul este omis. Acest prag elimină situațiile extreme în care o stație este geocodificată în Bulgaria sau Ucraina (erori reziduale după pipeline-ul de geocodificare).
+
+\textbf{Pasul 2 — detecție spike.} Un outlier mai subtil este stația cu GPS corect ca valoare absolută dar incorect față de vecinii săi pe rută, producând un vârf vizibil pe hartă (\textit{spike}): polilinia deviază brusc de la traseu, atinge un punct aberant, apoi revine. Criteriul de detecție compară detour-ul $A \to B \to C$ cu distanța directă $A \to C$: dacă raportul depășește pragul \texttt{MAX\_SPIKE\_RATIO = 3.0}, punctul $B$ este eliminat. Rutele feroviare reale au curbe line, cu raport tipic 1.2--1.8; un spike autentic (stație deplasată cu câțiva km față de traseu) produce rapoarte de 5--15:
+
+\begin{lstlisting}[language=JavaScript, caption=Filtru in doi pasi -- salt catastrofal si detectie spike]
+const MAX_JUMP_KM = 200
+const MAX_SPIKE_RATIO = 3.0   // detour/direct > 3x = spike GPS
+
+function filterOutliers(pts) {
+  if (pts.length <= 2) return pts
+  // Pasul 1: salturi catastrofale
+  let result = [pts[0]]
+  for (let i = 1; i < pts.length; i++) {
+    if (distKm(result[result.length - 1], pts[i]) <= MAX_JUMP_KM)
+      result.push(pts[i])
+  }
+  // Pasul 2: spike-uri (A->B->C unde detour >> direct)
+  if (result.length > 2) {
+    const clean = [result[0]]
+    for (let i = 1; i < result.length - 1; i++) {
+      const prev = clean[clean.length - 1]
+      const curr = result[i], next = result[i + 1]
+      const direct = distKm(prev, next)
+      if (direct > 0.5 &&
+          distKm(prev, curr) + distKm(curr, next) > MAX_SPIKE_RATIO * direct)
+        continue   // spike eliminat
+      clean.push(curr)
+    }
+    clean.push(result[result.length - 1])
+    result = clean
+  }
+  return result
+}
+\end{lstlisting}
+
+Pragul \texttt{MAX\_BACKTRACK\_KM} din versiunea anterioară a fost eliminat deoarece filtra eronat segmente legitime pe rutele cu traseu geografic în zig-zag (ex. București--Timișoara via Brașov, unde primele sute de km merg spre nord înainte de a vira vest). Detecția spike prin raport detour/direct nu are această limitare.
+
+Stațiile eliminate sunt omise din vizualizare, producând un segment drept între vecini valizi --- preferabil unui zigzag care ar induce în eroare utilizatorul. Stațiile confirmate ca greșit geocodificate sunt corectate printr-un proces separat, descris în subsecțiunea următoare.
+
+\subsection{Corectarea erorilor de geocodificare prin analiză de consistență}
+
+Geocodificarea automată bazată pe potrivire de nume este vulnerabilă la o problemă specifică rețelei feroviare române: există perechi de stații cu nume identice sau similare în județe diferite. Normalizarea NFKD elimină diacriticele și sufixele geografice, astfel că stații distincte produc același șir normalizat și primesc coordonatele celui mai apropiat nod OSM, indiferent de localizare. Exemple concrete: \textit{Câmpulung Moldovenesc} (jud. Suceava) și \textit{Câmpulung Muscel} (jud. Argeș) produc ambele șirul normalizat \texttt{campulung}; similar pentru \textit{Săcuieni Bihor} și \textit{Săcuieni Roman}, sau \textit{Slatina Timiș} și \textit{Slatina Olt}.
+
+\textbf{Metoda de detecție.} Erorile de geocodificare produc \textit{salturi geografice} anormale în secvența ordonată a stațiilor pe o rută: dacă stațiile $i$ și $i+1$ sunt consecutive în mersul trenului, distanța dintre coordonatele lor ar trebui să fie de ordinul zecilor de kilometri, nu al sutelor. Funcția fereastră \texttt{LAG()} permite compararea fiecărei stații cu predecesoarea sa pe aceeași rută:
+
+\begin{lstlisting}[language=SQL, caption=Detectarea salturilor GPS prin functia fereastra LAG()]
+SELECT statie, prec_statie,
+       ROUND(dlat * 111, 1) AS km_lat,
+       ROUND(dlon * 111, 1) AS km_lon
+FROM (
+    SELECT s.name                                   AS statie,
+           LAG(s.name)      OVER w                  AS prec_statie,
+           ABS(s.latitude  - LAG(s.latitude)  OVER w) AS dlat,
+           ABS(s.longitude - LAG(s.longitude) OVER w) AS dlon
+    FROM route_stops rs
+    JOIN stations s ON rs.station_id = s.station_id
+    WHERE s.latitude IS NOT NULL
+    WINDOW w AS (PARTITION BY rs.route_id
+                 ORDER BY rs.stop_order)
+) q
+WHERE dlat > 1.5 OR dlon > 1.5
+ORDER BY dlat + dlon DESC;
+\end{lstlisting}
+
+Un salt de peste 1,5 grade ($\approx$150~km) între stații consecutive indică fie un traseu cu un tunel transcontinental --- imposibil în România --- fie o eroare de geocodificare. Rularea interogării pe toate rutele din baza de date a identificat \textbf{23 de stații} cu coordonate greșite, grupate în cinci categorii (Tabelul~\ref{tab:geocoding-errors}).
+
+\begin{table}[ht]\small\linespread{1}
+\caption{Tipuri de erori de geocodificare identificate și corectate}
+\label{tab:geocoding-errors}
+\begin{tabular}{p{4.3cm} p{4.7cm} c}
+\textbf{Tip eroare} & \textbf{Exemplu} & \textbf{Nr.} \\\hline
+Stații omonime în județe diferite & Câmpulung Moldovenesc $\leftrightarrow$ Câmpulung Muscel & 8 \\
+Coordonate identice la stații vecine & Buzău Nord Hm.\ $=$ Buzău Sud & 4 \\
+Geocodificat în afara României & Dobra Hm.\ (în Serbia) & 3 \\
+Plasată pe linie greșită & Slatina Timiș lângă Slatina Olt & 5 \\
+Ordine inversată pe coridor & Ulmeni Hm., Clondiru h.\ la vest de Săhăteni & 3 \\
+\hline
+\textbf{Total} & & \textbf{23} \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{Metoda de corecție.} Fiecare stație identificată a fost corectată manual prin analiza vecinilor săi pe rută. Codurile de stație CFR (serii 50xxx, 60xxx etc.) sunt atribuite secvențial de-a lungul liniei, deci succesiunea lor confirmă ordinea geografică. De exemplu, pe coridorul București--Buzău, secvența Tomșani\,(50172)$\to$Mizil\,(50213)$\to$Săhăteni\,(50237)$\to$Ulmeni\,(50263)$\to$Buzău\,(50342) impune o creștere monotonă a longitudinii (direcție vest--est), ceea ce a permis detectarea și corectarea stațiilor cu coordonate inversate față de localizarea reală.
+
+Corectarea celor 23 de stații a eliminat crucificările vizibile ale poliliniei pe harta interactivă --- în special pe coridorul București--Buzău, unde stații geocodificate în pozițiile reciproc greșite produceau segmente încrucișate --- și a eliminat tronsoanele proiectate în afara granițelor României.
+
+\subsection{Eliminarea nodurilor tehnice feroviare}
+
+Nomenclatorul CFR conține, pe lângă stațiile comerciale (unde pasagerii urcă și coboară), o serie de \textbf{noduri de infrastructură tehnică}: ramificații (\emph{Ram.}), triaje (\emph{Triaj}), posturi de macaz (\emph{P.M.}, \emph{P.Mac.}), grupe tehnice (\emph{Gr.A}, \emph{Gr.B}), marcatori kilometrici (\emph{Km. X+YYY}) și tuneluri. Aceste intrări nu corespund locurilor unde pasagerii îmbarcă, nu au corespondent în OpenStreetMap ca noduri de transport public și, în consecință, geocodificarea lor returnează coordonate greșite sau eșuează complet.
+
+Au fost identificate și eliminate din baza de date toate stațiile ale căror denumiri conțineau sufixele tehnice enumerate mai sus. Excepție au constituit stațiile cu sufixele \emph{Hm.} (haltă magistrală) și \emph{h.} (haltă), care, deși au denumiri interne CFR, reprezintă opriri comerciale reale unde trenurile opresc cu pasageri.
+
+Un caz special a fost \textbf{București Nord}: în datele CFR importate, stația principală apărea exclusiv sub formele tehnice \emph{București Nord Gr.A} și \emph{București Nord Gr.B} (grupe tehnice ale complexului feroviar). Întrucât \emph{Gr.A} era referită ca origine sau destinație în 460 de rute, ștergerea directă ar fi distrus jumătate din rețeaua importată. Soluția adoptată a fost redenumirea \emph{Gr.A} $\rightarrow$ \textbf{București Nord} și remaparea tuturor referințelor din \emph{Gr.B} către stația redenumită, urmată de ștergerea \emph{Gr.B}.
+
+În total, au fost eliminate \textbf{85 de stații tehnice} (inclusiv Gr.B) și \textbf{2536 de intrări} din tabelul \texttt{route\_stops}, reducând numărul de stații de la 1.816 la 1.731.
+
+Într-un pas ulterior, au fost identificate și eliminate și \textbf{30 de stații de tip semnal} (\emph{Semnal PL.Sud}, \emph{Semnal Buzău}, \emph{Semnal Roman} etc.) — posturi de semnalizare feroviară fără oprire comercială — împreună cu 358 de intrări în \texttt{route\_stops}. Numărul final de stații este \textbf{1.701}.
+
+\section{Generarea și validarea codurilor QR}
+
+Platforma folosește două mecanisme distincte de generare a codurilor QR, cu cerințe de securitate diferite:
+
+\textbf{QR pentru bilete de tren} — la cumpărare, se generează un token aleatoriu prin \texttt{secrets.token\_urlsafe(32)} (256 biți de entropie). Hash-ul SHA-256 al tokenului este stocat în tabelul \texttt{qr\_tokens} legat de \texttt{travel\_entitlement}-ul pasagerului. La scanare, inspectorul trimite tokenul la endpoint-ul \texttt{POST /validate}, unde serverul verifică hash-ul, marchează tokenul ca folosit (\emph{single-use}) și returnează datele călătoriei. Această abordare permite \textbf{anti-replay online} — un token deja scanat nu mai poate fi refolosit.
+
+\textbf{QR pentru cardul de identitate digital} — cardul studențesc se semnează cu algoritmul \textbf{Ed25519} (RFC 8032). Backend-ul deține cheia privată și semnează un payload JSON canonical (cu câmpurile \texttt{student\_name}, \texttt{university}, \texttt{valid\_until}, \texttt{kid}); aplicația verificatorului deține cheia publică descărcată o singură dată la \texttt{GET /verification-key}. Formatul tokenului este \texttt{base64url(payload).base64url(signature)}, inspirat de JWS Compact Serialization (RFC 7515), dar mai compact decât JWT (fără header separat). Verificarea este posibilă \textbf{offline} — verificatorul de tren nu necesită internet pentru a valida cardul unui student:
+
+\begin{lstlisting}[language=Python, caption=Semnare token card digital cu Ed25519]
+def sign_payload(payload: dict) -> str:
+    canonical = json.dumps(payload, sort_keys=True,
+                           separators=(',', ':')).encode()
+    signature = get_private_key().sign(canonical)  # Ed25519PrivateKey
+    return (
+        base64.urlsafe_b64encode(canonical).rstrip(b'=').decode()
+        + '.'
+        + base64.urlsafe_b64encode(signature).rstrip(b'=').decode()
+    )
+\end{lstlisting}
+
+Ed25519 a fost ales față de HMAC deoarece HMAC simetric ar obliga verificatorul să dețină cheia secretă, compromiind întregul model de securitate. Față de RSA-2048 sau ECDSA-P256, Ed25519 produce semnături de 64 bytes (suficient de compacte pentru un cod QR), cu generare și verificare sub 1ms.
+
+\section{Sistemul de agenți universitari}
+
+\subsection{Modelul de date}
+
+Tabelul \texttt{universities} stochează instituțiile de învățământ, fiecare cu o stație principală asociată (\texttt{main\_station\_id}). Un utilizator cu rol \texttt{university\_agent} este legat de o universitate prin câmpul \texttt{university\_id} din tabelul \texttt{users}. Când un pasager uploadează o legitimație, documentul este stocat în \texttt{source\_documents} cu statusul \texttt{pending} și universitatea declarată.
+
+\subsection{Fluxul de verificare}
+
+Agentul vede în dashboard-ul său toate documentele cu status \texttt{pending} pentru universitatea sa (\texttt{GET /issuer/documents/pending}). La aprobare, \texttt{POST /issuer/documents/\{id\}/approve} schimbă statusul documentului în \texttt{approved} și creează o intrare în tabelul \texttt{user\_credentials} cu tipul \texttt{student} și data de expirare specificată de agent. La respingere, statusul devine \texttt{rejected} cu motivul indicat.
+
+\subsection{Integrarea cu calculul tarifelor}
+
+La calculul prețului unui bilet (\texttt{POST /tickets/quote} și \texttt{POST /tickets/buy}), sistemul verifică existența unei credențiale active de tip \texttt{student} pentru utilizatorul curent:
+
+\begin{lstlisting}[language=Python, caption=Verificare credentiala activa in calculul pretului]
+active_credential = db.execute(text("""
+    SELECT c.id FROM credentials c
+    WHERE c.user_id = :uid
+      AND c.credential_type = 'student'
+      AND c.status = 'active'
+      AND (c.valid_until IS NULL
+           OR c.valid_until > NOW())
+    LIMIT 1
+"""), {"uid": user_id}).first()
+has_student_discount = (active_credential is not None)
+\end{lstlisting}
+
+\section{Managementul abonamentelor}
+
+\subsection{Verificarea acoperirii rutei}
+
+Un abonament acoperă o rută dacă stația de plecare a abonamentului apare în ruta biletului \textit{înaintea} stației de destinație a abonamentului. Verificarea se face prin compararea ordinii stop-urilor pe ruta trenului:
+
+\begin{lstlisting}[language=Python, caption=Verificare acoperire abonament pe ruta biletului]
+def _route_covered_by_subscription(sub, leg_from_id,
+                                    leg_to_id, db):
+    # Gasim ordinea statiior pe ruta trenului
+    stops = db.execute(text("""
+        SELECT rs.station_id, rs.stop_order
+        FROM route_stops rs
+        WHERE rs.route_id = :rid
+          AND rs.station_id IN (:s1, :s2, :sa, :sb)
+        ORDER BY rs.stop_order
+    """), {...}).mappings().all()
+    # Abonamentul acopera daca sub_from apare inainte
+    # de sub_to, si ambii sunt intre leg_from si leg_to
+    ...
+\end{lstlisting}
+
+\section{Autentificare cu doi factori (MFA/TOTP)}
+
+Sistemul suportă autentificare cu doi factori bazată pe algoritmul TOTP (Time-based One-Time Password, RFC 6238), implementat prin librăria \texttt{pyotp}. Fluxul are trei etape:
+
+\textbf{Activare}: endpoint-ul \texttt{POST /mfa/setup} generează un secret TOTP unic per utilizator și returnează un URI \texttt{otpauth://} compatibil cu aplicații de autentificare (Google Authenticator, Authy). Secretul este stocat în câmpul \texttt{users.mfa\_secret} (criptat).
+
+\textbf{Confirmare și activare}: utilizatorul confirmă configurarea prin \texttt{POST /mfa/verify}, furnizând codul de 6 cifre curent. La verificare reușită, câmpul \texttt{users.mfa\_enabled} devine \texttt{true}.
+
+\textbf{Autentificare}: dacă MFA este activat, \texttt{POST /auth/login} returnează un token provizoriu (tip \texttt{mfa\_required}) care permite exclusiv apelul \texttt{POST /mfa/verify}. Numai după introducerea codului TOTP corect se emite token-ul JWT complet cu toate permisiunile.
+
+Fereastra de toleranță TOTP (\texttt{TOTP\_WINDOW}) este configurabilă pentru a compensa drifturi de ceas minore. Dezactivarea MFA (\texttt{POST /mfa/disable}) necesită furnizarea unui cod valid, prevenind dezactivarea accidentală sau malițioasă.
+
+\section{Extragerea automată a datelor din cartea de identitate (OCR + MRZ)}
+
+La uploadul documentului de identitate, sistemul poate extrage automat datele personale din cartea de identitate română prin \texttt{POST /documents/extract-id}. Procesul combină două tehnici complementare:
+
+\textbf{OCR cu easyocr}: imaginea este procesată cu librăria \texttt{easyocr} (încărcată lazy la primul apel pentru a minimiza memoria la pornire) pentru a extrage textul vizibil de pe față documentului. Rezultatele sunt filtrate și normalizate.
+
+\textbf{Parser MRZ (Machine Readable Zone)}: zona inferioară a cărții de identitate conține două rânduri de 36 de caractere în format TD2 (sau TD1 pentru documentele mai vechi). Parserul extrage câmpurile structurate conform ICAO 9303:
+
+\begin{lstlisting}[language=Python, caption=Parser MRZ pentru cartea de identitate română (format TD2)]
+def parse_mrz_td2(line1: str, line2: str) -> dict:
+    # Linia 1: tip document, cod tara, nume (3-44)
+    surname_given = line1[5:44].split("<<", 1)
+    surname  = surname_given[0].replace("<", " ").strip()
+    given    = surname_given[1].replace("<", " ").strip() if len(surname_given) > 1 else ""
+    # Linia 2: numar document, nationalitate, DOB, sex, expirare, CNP
+    doc_number = line2[0:9].replace("<", "")
+    dob        = line2[13:19]   # YYMMDD
+    sex        = line2[20]
+    cnp        = line2[28:41].replace("<", "")
+    return {"surname": surname, "given_names": given,
+            "date_of_birth": dob, "sex": sex, "document_number": doc_number, "cnp": cnp}
+\end{lstlisting}
+
+Datele extrase sunt pre-populate în formularul de profil, reducând erorile de introducere manuală. Câmpurile critice (CNP, nume, data nașterii) sunt înghețate după verificarea identității de către agentul universitar, prevenind modificarea ulterioară (\textit{identity laundering}).
+
+\section{Verificarea offline a cardului digital — semnătură Ed25519}
+
+Cardul digital de identitate al pasagerului (\textit{Rail Digital Card}) este semnat criptografic cu algoritmul Ed25519 (curbe eliptice, RFC 8037) prin modulul \texttt{signing.py} (367 LOC). Aceasta permite agentului de tren să verifice autenticitatea cardului fără conectivitate la server.
+
+\textbf{Generarea cheii}: la pornirea serverului, dacă nu există, se generează o pereche de chei Ed25519 și se salvează la \texttt{keys/signing\_ed25519.pem}. Cheia publică este expusă prin \texttt{GET /crypto/public-key} și descărcată de agentul de tren la prima utilizare (sau la cerere).
+
+\textbf{Semnarea token-ului}: la generarea unui card, \texttt{sign\_payload()} serializează payload-ul (identificator card, identitate titular, tipurile de credențiale active, data expirării) ca JSON, calculează semnătura Ed25519 și encodează totul în format compact \texttt{base64url(payload).base64url(signature)}, inspirat din JWS compact serialization.
+
+\textbf{Verificarea offline}: agentul de tren, cu cheia publică pre-descărcată în browser (\texttt{localStorage}), apelează \texttt{verifyOfflineToken()} care reconstruiește payload-ul, verifică semnătura Ed25519 local (fără cerere HTTP) și afișează datele pasagerului. Dacă semnătura nu corespunde sau token-ul a expirat (\texttt{exp}), verificarea eșuează.
+
+Modul offline este util în tunele sau zone fără semnal, cu condiția că cheia publică a fost descărcată anterior. Nu oferă protecție anti-replay (un token valid poate fi prezentat de mai multe ori), spre deosebire de modul online care marchează prezentarea ca \texttt{used} la prima verificare reușită.
+
+\section{Statistici de călătorie, emisii CO\textsubscript{2} și realizări}
+
+Endpoint-ul \texttt{GET /me/travel-stats} calculează statistici agregate din istoricul biletelor unui pasager:
+
+\begin{itemize}
+  \item \textbf{Kilometri parcurși}: suma distanțelor tuturor leg-urilor din biletele cu status \texttt{used} sau \texttt{active};
+  \item \textbf{Emisii CO\textsubscript{2} economisite}: calculat ca \texttt{co2\_kg = total\_km * 0.12} (factorul mediu de emisii al unui autoturism în România, 120g CO\textsubscript{2}/km), comparat cu alternativa rutieră;
+  \item \textbf{Echivalent copaci}: \texttt{trees = co2\_kg / 21} (un copac absoarbe ~21kg CO\textsubscript{2}/an);
+  \item \textbf{Realizări (achievements)}: sistem gamificat cu 7 insigne deblocabile: \textit{first\_trip}, \textit{frequent\_traveler} (10 călătorii), \textit{veteran} (50 călătorii), \textit{km\_1000}, \textit{km\_5000}, \textit{eco\_warrior} (1000kg CO\textsubscript{2} economisite), \textit{saver} (500 RON economisiți prin reduceri).
+\end{itemize}
+
+\section{Politica de înghețare a datelor personale}
+
+Modulul \texttt{identity\_status.py} implementează o politică de securitate împotriva \textit{identity laundering}: după ce un agent universitar verifică și aprobă identitatea unui pasager, câmpurile sensibile (\texttt{cnp}, \texttt{first\_name}, \texttt{last\_name}, \texttt{date\_of\_birth}, \texttt{home\_station\_id}) sunt înghețate — orice tentativă de modificare prin \texttt{PUT /users/me} returnează eroare 403. Înghețarea este activă pe durata valabilității credențialei de identitate (legată de anul academic curent, expirând la 1 octombrie). Aceasta asigură că reducerile studențești sunt aplicate pe baza identității verificate, nu a uneia modificate ulterior.
+
+
+\chapter{Evaluare}
+
+\section{Testarea funcționalităților}
+
+\subsection{Scenarii de testare}
+
+Sistemul dispune de o suită de 421 teste automate (pytest), organizate în 35 de fișiere, acoperind teste unitare, de integrare și end-to-end pentru toate modulele critice: autentificare și MFA, planificator de călătorie, rezervare locuri, credențiale, harta feroviară și semnătură Ed25519. Pe lângă testele automate, au fost executate și 12 scenarii de validare funcțională de nivel înalt, prezentate în Tabelul~\ref{tab:tests}, care confirmă comportamentul integrat al aplicației din perspectiva utilizatorului final.
+
+\begin{table}[ht]\small\linespread{1}
+\caption{Rezultate testare funcțională}
+\label{tab:tests}
+\begin{tabular}{l p{5.5cm} l l}
+\textbf{ID} & \textbf{Scenariu} & \textbf{Rezultat} & \textbf{Obs.} \\\hline
+T-01 & Înregistrare și autentificare utilizator & PASS & \\
+T-02 & Căutare trenuri directe pe o dată dată & PASS & \\
+T-03 & Căutare traseu cu 1 schimbare & PASS & \\
+T-04 & Rezervare loc și expirare hold la 5 min & PASS & \\
+T-05 & Cumpărare bilet cu reducere studențească & PASS & \\
+T-06 & Cumpărare bilet pentru însoțitor (preț integral) & PASS & \\
+T-07 & Cumpărare bilet cu abonament activ (preț 0) & PASS & \\
+T-08 & Reprogramare bilet pe tren alternativ & PASS & \\
+T-09 & Upload document și verificare de agent & PASS & \\
+T-10 & Cumpărare abonament și calcul economii & PASS & \\
+T-11 & Harta cu traseu prin stații intermediare reale & PASS & \\
+T-12 & Cod QR generat și afișat corect & PASS & \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Testarea consistenței rezervărilor simultane}
+
+Un scenariu critic este că două sesiuni nu pot rezerva același loc simultan. Testul a fost efectuat prin simularea a două cereri simultane de hold pentru același loc. Datorită constrângerii \texttt{UNIQUE(seat\_id, travel\_date)} din tabelul \texttt{seat\_reservations}, PostgreSQL respinge automat a doua inserare cu eroare de unicitate (23505), propagată ca HTTP 409 Conflict, confirmând că nu sunt posibile rezervări duble.
+
+\section{Comparație cu soluțiile existente}
+
+\subsection{Funcționalitate}
+
+Comparând cu sistemul CFR Călători (soluția de referință națională), platforma implementată adaugă:
+\begin{itemize}
+  \item Fluxul complet de verificare digitală a legitimației studențești, eliminând necesitatea documentelor fizice;
+  \item Harta interactivă cu geometria reală a căilor ferate;
+  \item Calculul corect al prețurilor pentru grupuri mixte (studenți + non-studenți).
+\end{itemize}
+
+\subsection{Performanța API-ului de planificare}
+
+Tabelul~\ref{tab:perf} prezintă timpii de răspuns măsurați pentru endpoint-ul \texttt{/trains/search} la diferite scenarii de rute.
+
+\begin{table}[ht]\small\linespread{1}
+\caption{Timpii de răspuns pentru planificarea rutei}
+\label{tab:perf}
+\begin{tabular}{l c c c}
+\textbf{Tip rută} & \textbf{Schimbări} & \textbf{Timp mediu (ms)} & \textbf{Timp maxim (ms)} \\\hline
+Directă (ex: Buc.—Brașov) & 0 & 45 & 120 \\
+O schimbare (ex: Buc.—Cluj) & 1 & 180 & 420 \\
+Două schimbări & 2 & 850 & 1800 \\
+\hline
+\end{tabular}
+\end{table}
+
+Timpii cresc exponențial cu numărul de schimbări datorită complexității algoritmului BFS. Optimizarea prin cache reduce de aproximativ 8x numărul de interogări la baza de date față de implementarea naivă, compensând parțial această creștere.
+
+\subsection{Acoperirea GPS a stațiilor}
+
+Harta feroviară interactivă depinde de disponibilitatea coordonatelor GPS pentru stații. Tabelul~\ref{tab:gps} prezintă evoluția acoperirii GPS.
+
+\begin{table}[ht]\small\linespread{1}
+\caption{Evoluția acoperirii GPS a stațiilor CFR}
+\label{tab:gps}
+\begin{tabular}{l c c}
+\textbf{Etapă} & \textbf{Stații cu GPS} & \textbf{Procent} \\\hline
+Inițial (date CFR importate, fără GPS) & 0 din 1.818 & 0\% \\
+Geocodificare automată v1 via Overpass API & 1.471 din 1.818 & 80.9\% \\
+Geocodificare v2 (fix diacritice, sufix gară, interpolare) & 1.807 din 1.816 & 99.5\% \\
+După eliminarea nodurilor tehnice și semnale & 1.696 din 1.701 & 99.7\% \\
+\hline
+\end{tabular}
+\end{table}
+
+Acoperirea de 99.7\% acoperă toate coridoarele principale și secundare ale rețelei CFR. Cele 5 stații fără GPS sunt stații din afara granițelor României (Vidin, Kapitanovci) care nu apar în bazele de date geografice publice.
+
+\section{Limitări identificate}
+
+\textbf{Plată integrată}: platforma simulează plata (acceptă orice sumă) fără integrare cu un procesor de plăți real (Stripe, PayU). Aceasta este o decizie de proiectare conștientă pentru un demonstrator academic; în producție ar fi necesară integrarea cu PayU (România) sau Stripe.
+
+\textbf{Geocodificarea stațiilor}: potrivirea automată a numelor CFR cu nodurile OSM produce circa 19\% stații fără GPS și un număr mic de stații geocodificate greșit (coordonate asociate unui nod OSM cu același nume normalizat dar în altă locație). Acestea din urmă sunt detectate și corectate printr-un script de analiză a consistenței rutelor, dar procesul necesită intervenție periodică pe măsură ce datele OSM evoluează.
+
+\textbf{Geometria traseelor}: traseul afișat pe hartă trece prin stațiile intermediare reale din mersul CFR, dar segmentele dintre stații sunt linii drepte, nu geometria exactă a șinelor. Aceasta este o aproximare vizuală acceptabilă pentru scopul demonstratorului; geometria exactă ar necesita descărcarea și procesarea datelor OSM de tip \texttt{way[railway=rail]}.
+
+\textbf{Tarife orientative cu un singur operator}: prețurile implementate aproximează „Tariful 100" al CFR Călători și nu acoperă tarifele celorlalți operatori feroviari activi (Ferotrafic, Softrans, Regio Călători, TFC etc.), care aplică grile proprii. Platforma returnează un preț estimativ unificat indiferent de operatorul care operează efectiv trenul ales, ceea ce introduce erori de tarifare pentru trenurile non-CFR. O implementare completă ar necesita grile tarifare separate per operator și logică de selecție bazată pe câmpul \texttt{trains.operator\_id}.
+
+\textbf{Extinderea biletelor combinate}: platforma suportă achiziționarea unui bilet combinat pentru călătorii cu maximum două schimbări prin endpoint-ul \texttt{POST /tickets/buy-journey}. Toate segmentele sunt rezervate și plătite atomic (într-o singură tranzacție), cu anulare completă la eșec. Fiecare segment primește un cod QR propriu. Versiunea curentă nu include reprogramarea per-segment sau anularea parțială (numai unul din segmente); acestea ar reprezenta extensii utile pentru un sistem de producție.
+
+\textbf{Scalabilitate}: aplicația nu a fost testată la scară (mii de utilizatori concurenți). Algoritmul BFS pentru rute cu 2 schimbări poate ajunge la 1--2 secunde pe interogări complexe; pentru producție ar fi necesare caching distribuit și indexare suplimentară în baza de date.
+
+
+\chapter{Concluzii}
+
+\section{Rezumat}
+
+Lucrarea a prezentat proiectarea și implementarea unei platforme digitale pentru gestiunea identității și a biletelor feroviare, cu accent pe experiența pasagerilor studenți. Obiectivele propuse au fost atinse în totalitate:
+
+\begin{itemize}
+  \item \textbf{O1 (Autentificare cu roluri)} — Implementat cu JWT și politici de acces granulare per rol și per utilizator.
+  \item \textbf{O2 (Planificator multi-leg)} — Implementat ca BFS cu constrângeri temporale și cache, cu timpi de răspuns sub 1 secundă pentru rute directe și cu o schimbare.
+  \item \textbf{O3 (Credențiale studențești)} — Fluxul complet (upload, verificare, emitere, aplicare la preț) este funcțional și testat.
+  \item \textbf{O4 (Rezervare locuri cu concurență)} — Mecanismul de hold cu constrângere \texttt{UNIQUE(seat\_id, travel\_date)} previne rezervările duble prin concurență optimistă la nivel de bază de date.
+  \item \textbf{O5 (Harta interactivă)} — Implementat: 1.696 stații geocodificate (99.7\%) via Overpass API și Nominatim, din 1.701 stații de pasageri rămase după eliminarea nodurilor tehnice și a semnalelor feroviare; traseu afișat prin stațiile intermediare reale cu filtrare automată a outlierilor GPS prin detecție spike.
+  \item \textbf{O6 (Abonamente)} — Calcul corect al prețurilor cu diferențiere între titular și însoțitori.
+\end{itemize}
+
+\section{Contribuții}
+
+Contribuțiile principale ale lucrării sunt:
+
+\textbf{Arhitecturală}: o arhitectură client-server completă, cu separare clară a responsabilităților, testată cu 421 teste automate (pytest) organizate în 35 de fișiere, acoperind autentificare, planificare, rezervare, credențiale și semnătură criptografică.
+
+\textbf{Geocodificare}: geocodificarea automată a 1.471 stații CFR din nomenclatorul oficial prin corelarea numelor cu nodurile feroviare OSM (Overpass API), incluzând normalizare NFKD a diacriticelor și eliminarea sufixelor tehnice specifice CFR, urmată de filtrarea outlierilor prin analiză de consistență pe graficul de rute.
+
+\textbf{Identitate digitală}: un flux end-to-end care combină: extragerea automată a datelor din cartea de identitate (OCR + parser MRZ), verificarea de către agentul universitar, emiterea de credențiale digitale și înghețarea datelor personale după verificare (prevenire identity laundering). Cardul digital de identitate este semnat Ed25519 și verificabil offline de personalul de tren.
+
+\textbf{Securitate}: autentificare cu doi factori TOTP/MFA, semnături criptografice Ed25519 pentru carduri digitale, verificare anti-replay pe prezentările de card, coduri QR bilet single-use cu HMAC, și constrângeri UNIQUE în baza de date pentru prevenirea rezervărilor duble.
+
+\textbf{Tarifară}: logica corectă de aplicare selectivă a reducerilor (numai pentru titular, nu pentru însoțitori) și calcul rambursare pe trei trepte CFR (100\%/50\%/0\% în funcție de momentul anulării față de plecare).
+
+\section{Direcții de dezvoltare ulterioară}
+
+\textbf{Integrare GTFS}: importul orarelor reale din feed-uri GTFS publice ar transforma platforma dintr-un demonstrator funcțional într-un sistem utilizabil în producție.
+
+\textbf{Aplicație mobilă}: un client nativ React Native ar îmbunătăți experiența utilizator pe dispozitive mobile, cu suport pentru notificări push (întârzieri, codul QR offline).
+
+\textbf{Identitate digitală federată}: integrarea cu eIDAS sau cu sistemul ROSE (Registrul Operatorilor Studenți și Elevilor) ar elimina necesitatea verificării manuale de către agenți universitari.
+
+\textbf{Geometrie feroviară locală}: descărcarea și stocarea locală a geometriei OSM pentru coridoarele principale ar elimina dependența de Overpass API și ar reduce latența la afișarea hărții.
+
+\textbf{Plăți integrate}: integrarea cu un procesor de plăți (PayU pentru România) ar completa fluxul comercial al aplicației.
+
+
+\chapter*{Bibliografie}\addcontentsline{toc}{chapter}{Bibliografie}
+
+\bibitem{fastapi2023}
+S. Ramírez, \textit{FastAPI Documentation}, Tiangolo, 2023.
+[Online]. Disponibil: \url{https://fastapi.tiangolo.com}.
+
+\bibitem{db2023digital}
+Deutsche Bahn AG, \textit{DB Navigator — Digital Ticketing Platform},
+Annual Report 2023, Frankfurt, 2023.
+
+\bibitem{nationalrail2022}
+National Rail Enquiries, \textit{Railcard Digital: Implementation and Adoption},
+Technical Report, London, 2022.
+[Online]. Disponibil: \url{https://www.nationalrail.co.uk/railcards}.
+
+\bibitem{postgresql2023}
+PostgreSQL Global Development Group, \textit{PostgreSQL 15 Documentation},
+2023. [Online]. Disponibil: \url{https://www.postgresql.org/docs/15/}.
+
+\bibitem{react2023}
+Meta Platforms, \textit{React — A JavaScript library for building user interfaces},
+2023. [Online]. Disponibil: \url{https://react.dev}.
+
+\bibitem{leaflet2023}
+V. Agafonkin, \textit{Leaflet — an open-source JavaScript library for
+mobile-friendly interactive maps}, 2023.
+[Online]. Disponibil: \url{https://leafletjs.com}.
+
+\bibitem{overpass2023}
+R. Olbricht, \textit{Overpass API User's Manual}, OpenStreetMap Foundation,
+2023. [Online]. Disponibil: \url{https://overpass-api.de/}.
+
+\bibitem{jwt2015}
+M. Jones, J. Bradley, N. Sakimura, \textit{JSON Web Token (JWT)},
+RFC 7519, Internet Engineering Task Force, 2015.
+[Online]. Disponibil: \url{https://tools.ietf.org/html/rfc7519}.
+
+\bibitem{gtfs2023}
+Google LLC, \textit{General Transit Feed Specification (GTFS) Reference},
+2023. [Online]. Disponibil: \url{https://gtfs.org/documentation/realtime/reference/}.
+
+\bibitem{cfr2024}
+CFR Călători SA, \textit{Tarifele și reducerile aplicabile — Regulament de transport},
+București, 2024.
+[Online]. Disponibil: \url{https://www.cfrcalatori.ro/tarife/}.
+
+\bibitem{dijkstra1959}
+E. W. Dijkstra, ``A note on two problems in connexion with graphs,''
+\textit{Numerische Mathematik}, vol. 1, pp. 269--271, 1959.
+
+\bibitem{hart1968}
+P. E. Hart, N. J. Nilsson, B. Raphael,
+``A formal basis for the heuristic determination of minimum cost paths,''
+\textit{IEEE Transactions on Systems Science and Cybernetics},
+vol. 4, no. 2, pp. 100--107, 1968.
+
+\bibitem{sqlalchemy2023}
+M. Bayer, \textit{SQLAlchemy Documentation}, 2023.
+[Online]. Disponibil: \url{https://docs.sqlalchemy.org}.
+
+\bibitem{vite2023}
+E. You, \textit{Vite — Next Generation Frontend Tooling}, 2023.
+[Online]. Disponibil: \url{https://vitejs.dev}. [Accesat: Iunie 2026]
+
+\bibitem{osm2023}
+OpenStreetMap Foundation, \textit{OpenStreetMap Wiki}, 2023.
+[Online]. Disponibil: \url{https://wiki.openstreetmap.org}
+
+\end{thebibliography}
+
+
+\chapter*{Anexe}\addcontentsline{toc}{chapter}{Anexe}
+
+\begin{appendices}
+
+\chapter{Schema completă a bazei de date}
+
+Mai jos este prezentată schema SQL principală pentru tabelele implicate în fluxul de cumpărare și rezervare locuri.
+
+\begin{lstlisting}[language=SQL, caption=Schema tabelelor pentru bilete și locuri (extras)]
+-- Un bilet = un segment de tren (un singur tren, o singura data)
+CREATE TABLE tickets (
+    ticket_id               SERIAL PRIMARY KEY,
+    user_id                 INTEGER NOT NULL REFERENCES users(user_id),
+    train_id                INTEGER NOT NULL REFERENCES trains(train_id),
+    departure_station_id    INTEGER NOT NULL REFERENCES stations(station_id),
+    arrival_station_id      INTEGER NOT NULL REFERENCES stations(station_id),
+    travel_date             DATE NOT NULL,
+    ticket_type             VARCHAR(20),   -- 'simple', 'retur'
+    ticket_status           VARCHAR(20) DEFAULT 'active'
+                            CHECK (ticket_status IN
+                                ('active','used','expired','cancelled','rescheduled')),
+    price                   NUMERIC(8,2) NOT NULL,
+    discount_applied        NUMERIC(8,2) DEFAULT 0,
+    passenger_name          VARCHAR(200),  -- NULL = titular cont
+    purchase_time           TIMESTAMP DEFAULT NOW()
+);
+
+-- Locul rezervat efectiv pentru un bilet (dupa confirmare)
+CREATE TABLE ticket_seats (
+    ticket_seat_id  SERIAL PRIMARY KEY,
+    ticket_id       INTEGER NOT NULL REFERENCES tickets(ticket_id),
+    seat_id         INTEGER NOT NULL REFERENCES seats(seat_id),
+    travel_date     DATE NOT NULL,
+    sold_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_ticket_seats_seat_date UNIQUE (seat_id, travel_date)
+);
+
+-- Hold temporar de 5 minute pe un loc (inaintea confirmarii platii)
+CREATE TABLE seat_reservations (
+    reservation_id  SERIAL PRIMARY KEY,
+    seat_id         INTEGER NOT NULL REFERENCES seats(seat_id),
+    user_id         INTEGER NOT NULL REFERENCES users(user_id),
+    train_id        INTEGER NOT NULL REFERENCES trains(train_id),
+    travel_date     DATE NOT NULL,
+    held_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at      TIMESTAMPTZ NOT NULL,
+    CONSTRAINT uq_seat_reservation_active UNIQUE (seat_id, travel_date)
+);
+\end{lstlisting}
+
+\chapter{Structura proiectului}
+
+\begin{lstlisting}[caption=Structura directoarelor proiectului]
+LICENTA/
+├── backend/
+│   ├── app/
+│   │   ├── core/
+│   │   │   ├── config.py       # variabile de mediu
+│   │   │   ├── database.py     # SessionLocal, engine
+│   │   │   └── security.py     # JWT, bcrypt
+│   │   ├── routers/
+│   │   │   ├── auth.py
+│   │   │   ├── tickets.py
+│   │   │   ├── seats.py
+│   │   │   ├── subscriptions.py
+│   │   │   ├── credentials.py
+│   │   │   └── map.py
+│   │   └── services/
+│   │       ├── trip_planner.py
+│   │       └── qr_generator.py
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── BuyTicket.jsx
+│   │   │   ├── MyTickets.jsx
+│   │   │   ├── Subscriptions.jsx
+│   │   │   ├── MapView.jsx
+│   │   │   └── ...
+│   │   ├── components/
+│   │   │   └── SeatMap.jsx
+│   │   ├── services/
+│   │   │   └── api.js
+│   │   └── utils/
+│   │       └── trainType.js
+│   └── package.json
+├── database/
+│   ├── 01_schema.sql
+│   ├── 02_seed_operators.sql
+│   └── ...
+└── run.py
+\end{lstlisting}
+
+\end{appendices}
+
+\end{document}

@@ -100,8 +100,9 @@ export default function Dashboard({ user }) {
 
   const pendingDocs   = documents.filter(d => d.status === 'pending')
   const approvedDocs  = documents.filter(d => d.status === 'approved')
-  const activeCreds   = credentials.filter(c => c.status === 'active')
-  const expiredCreds  = credentials.filter(c => c.status === 'expired')
+  const HIDDEN_CRED_TYPES = ['identity_verified']
+  const activeCreds   = credentials.filter(c => c.status === 'active' && !HIDDEN_CRED_TYPES.includes(c.credential_type))
+  const expiredCreds  = credentials.filter(c => c.status === 'expired' && !HIDDEN_CRED_TYPES.includes(c.credential_type))
 
   // Determina pasul curent
   const step = activeCreds.length > 0 ? 3
