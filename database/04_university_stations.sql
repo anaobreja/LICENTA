@@ -11,7 +11,7 @@ WHERE name = 'Bucureşti Nord Gr.A';
 UPDATE stations SET latitude = 46.7869, longitude = 23.5828,
   is_university_hub = TRUE, student_count = 100000, universities_count = 4,
   notes = 'UBB, UTCN, UMF Cluj, USAMV Cluj'
-WHERE name = 'Cluj-Napoca';
+WHERE name IN ('Cluj Napoca', 'Cluj-Napoca');
 
 -- 3. Iasi (UAIC, TUIASI, UMF Iasi, USAMV)
 UPDATE stations SET latitude = 47.1664, longitude = 27.5868,

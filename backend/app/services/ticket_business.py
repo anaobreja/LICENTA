@@ -95,6 +95,63 @@ def get_train_arrival_datetime(
     return datetime.combine(arr_date, arr_time).replace(tzinfo=timezone.utc)
 
 
+def get_segment_departure_datetime(
+    db: Session, train_id: int, departure_station_id: int, travel_date: date,
+) -> Optional[datetime]:
+    """
+    Ora plecarii din statia SPECIFICA a biletului (nu origin-ul rutei).
+    Foloseste route_stops.departure_time pentru station_id dat.
+    """
+    row = db.execute(
+        text("""
+            SELECT rs.departure_time
+            FROM route_stops rs
+            JOIN trains t ON t.route_id = rs.route_id
+            WHERE t.train_id = :tid AND rs.station_id = :sid
+            ORDER BY rs.stop_order ASC
+            LIMIT 1
+        """),
+        {"tid": train_id, "sid": departure_station_id},
+    ).first()
+    if not row or row[0] is None:
+        # Fallback la origine ruta daca statia nu apare in route_stops
+        return get_train_departure_datetime(db, train_id, travel_date)
+    return datetime.combine(travel_date, row[0]).replace(tzinfo=timezone.utc)
+
+
+def get_segment_arrival_datetime(
+    db: Session, train_id: int, departure_station_id: int,
+    arrival_station_id: int, travel_date: date,
+) -> Optional[datetime]:
+    """
+    Ora sosirii in statia SPECIFICA a biletului. Gestioneaza si overnight
+    (daca arrival_time < segment departure_time -> ziua urmatoare).
+    """
+    row = db.execute(
+        text("""
+            SELECT rs.arrival_time
+            FROM route_stops rs
+            JOIN trains t ON t.route_id = rs.route_id
+            WHERE t.train_id = :tid AND rs.station_id = :sid
+            ORDER BY rs.stop_order DESC
+            LIMIT 1
+        """),
+        {"tid": train_id, "sid": arrival_station_id},
+    ).first()
+    if not row or row[0] is None:
+        return get_train_arrival_datetime(db, train_id, travel_date)
+    arr_time = row[0]
+
+    # Detect overnight: arrival < segment departure
+    dep_dt = get_segment_departure_datetime(
+        db, train_id, departure_station_id, travel_date
+    )
+    arr_date = travel_date
+    if dep_dt is not None and arr_time < dep_dt.time():
+        arr_date = travel_date + timedelta(days=1)
+    return datetime.combine(arr_date, arr_time).replace(tzinfo=timezone.utc)
+
+
 # ---------------------------------------------------------------------------
 # Anti-overlap
 # ---------------------------------------------------------------------------
@@ -104,6 +161,9 @@ def check_overlap(
     user_id: int,
     train_id: int,
     travel_date: date,
+    departure_station_id: Optional[int] = None,
+    arrival_station_id: Optional[int] = None,
+    source_train_id: Optional[int] = None,
 ) -> None:
     """
     Verifica daca user-ul mai are deja un bilet activ care se suprapune
@@ -121,8 +181,20 @@ def check_overlap(
       NU sunt considerate overlap — un tren care soseste la 12:00 si altul
       care pleaca la 12:00 sunt acceptate).
     """
-    new_dep = get_train_departure_datetime(db, train_id, travel_date)
-    new_arr = get_train_arrival_datetime(db, train_id, travel_date)
+    # Bug #38 FIX: foloseste orele SEGMENTULUI biletului (statiile dep/arr),
+    # nu orele rutei intregi. Inainte trenuri lung-distanta erau validate pe
+    # orele rutei origin->dest, nu pe segmentul real cumparat.
+    if departure_station_id is not None and arrival_station_id is not None:
+        new_dep = get_segment_departure_datetime(
+            db, train_id, departure_station_id, travel_date,
+        )
+        new_arr = get_segment_arrival_datetime(
+            db, train_id, departure_station_id, arrival_station_id, travel_date,
+        )
+    else:
+        # Fallback compat retroactiv
+        new_dep = get_train_departure_datetime(db, train_id, travel_date)
+        new_arr = get_train_arrival_datetime(db, train_id, travel_date)
     if new_dep is None or new_arr is None:
         # Daca trenul nu are ore (date incomplete), sarim peste verificare.
         # Mai bine permitem decat sa blocam pe demo.
@@ -130,33 +202,45 @@ def check_overlap(
 
     # Selectam biletele active +/- 1 zi pentru a acoperi cazurile de noapte.
     # Orele plecare/sosire vin din route_stops (prima/ultima oprire pe ruta).
+    source_filter = "AND t.train_id != :source_train" if source_train_id is not None else ""
+    params: dict = {
+        "uid": user_id,
+        "dmin": travel_date - timedelta(days=1),
+        "dmax": travel_date + timedelta(days=1),
+        "new_train": train_id,
+    }
+    if source_train_id is not None:
+        params["source_train"] = source_train_id
+
     candidates = db.execute(
-        text("""
+        text(f"""
             SELECT t.ticket_id, t.train_id, t.travel_date,
+                   t.departure_station_id, t.arrival_station_id,
                    tr.train_number,
-                   s_orig.name AS from_station, s_dest.name AS to_station
+                   sd.name AS from_station, sa.name AS to_station
             FROM tickets t
             JOIN trains tr ON tr.train_id = t.train_id
-            LEFT JOIN routes r ON r.route_id = tr.route_id
-            LEFT JOIN stations s_orig ON s_orig.station_id = r.origin_station_id
-            LEFT JOIN stations s_dest ON s_dest.station_id = r.destination_station_id
+            LEFT JOIN stations sd ON sd.station_id = t.departure_station_id
+            LEFT JOIN stations sa ON sa.station_id = t.arrival_station_id
             WHERE t.user_id = :uid
               AND t.ticket_status = 'active'
+              AND t.passenger_name IS NULL
               AND t.travel_date BETWEEN :dmin AND :dmax
+              AND t.train_id != :new_train
+              {source_filter}
         """),
-        {
-            "uid": user_id,
-            "dmin": travel_date - timedelta(days=1),
-            "dmax": travel_date + timedelta(days=1),
-        },
+        params,
     ).mappings().all()
 
     for existing in candidates:
-        ex_dep = get_train_departure_datetime(
-            db, existing["train_id"], existing["travel_date"]
+        # Folosim orele SEGMENTULUI biletului existent (statiile lui dep/arr)
+        ex_dep = get_segment_departure_datetime(
+            db, existing["train_id"], existing["departure_station_id"],
+            existing["travel_date"],
         )
-        ex_arr = get_train_arrival_datetime(
-            db, existing["train_id"], existing["travel_date"]
+        ex_arr = get_segment_arrival_datetime(
+            db, existing["train_id"], existing["departure_station_id"],
+            existing["arrival_station_id"], existing["travel_date"],
         )
         if ex_dep is None or ex_arr is None:
             continue
@@ -346,6 +430,65 @@ def release_seat(
         {"sid": seat_id, "td": travel_date, "uid": user_id},
     ).first()
     return result is not None
+
+
+def pick_available_seats(
+    db: Session,
+    train_id: int,
+    travel_date: date,
+    n: int,
+    excluded: list[int] | None = None,
+) -> list[int]:
+    """
+    Auto-asignare locuri: returneaza primele `n` seat_ids din tren care nu sunt
+    vandute si nu sunt in hold activ pentru travel_date.
+
+    Folosit la cumparare cand userul nu si-a ales explicit locul (in loc sa
+    cream un bilet fara loc, dam automat un loc liber).
+
+    Argumente:
+      - train_id, travel_date: identifica setul de seats valid
+      - n: cate locuri vrem
+      - excluded: seat_ids deja alocate in iteratia curenta (ex. cand cerem
+        seats pentru pax 2 dupa ce am alocat 1 pentru pax 1 in aceeasi tranzactie)
+
+    Returneaza lista cu seat_ids (poate fi mai scurta decat n daca trenul e
+    aproape plin). Caller-ul trebuie sa verifice ca len() == n.
+    """
+    release_expired_reservations(db)
+    excluded = excluded or []
+
+    rows = db.execute(
+        text("""
+            SELECT s.seat_id
+            FROM seats s
+            JOIN train_cars tc ON tc.train_car_id = s.train_car_id
+            WHERE tc.train_id = :tid
+              AND s.seat_id <> ALL(:excluded)
+              -- Locul nu trebuie sa fie deja vandut pe travel_date pentru un
+              -- bilet activ.
+              AND NOT EXISTS (
+                  SELECT 1 FROM ticket_seats ts
+                  JOIN tickets t ON t.ticket_id = ts.ticket_id
+                  WHERE ts.seat_id = s.seat_id
+                    AND ts.travel_date = :td
+                    AND t.ticket_status = 'active'
+              )
+              -- Locul nu trebuie sa fie in hold pentru alt user (orice hold
+              -- activ blocheaza auto-asignarea, ca sa nu suprapunem cu un user
+              -- care e in proces de cumparare).
+              AND NOT EXISTS (
+                  SELECT 1 FROM seat_reservations sr
+                  WHERE sr.seat_id = s.seat_id
+                    AND sr.travel_date = :td
+                    AND sr.expires_at > NOW()
+              )
+            ORDER BY tc.car_number, s.seat_row, s.seat_letter
+            LIMIT :n
+        """),
+        {"tid": train_id, "td": travel_date, "excluded": excluded, "n": n},
+    ).fetchall()
+    return [r[0] for r in rows]
 
 
 def confirm_seats_for_ticket(

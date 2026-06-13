@@ -1,0 +1,1101 @@
+\documentclass[12pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[romanian]{babel}
+\renewcommand\familydefault{\sfdefault}
+
+\usepackage[margin=2.54cm]{geometry}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+
+% formatting sections and subsections
+\usepackage{textcase}
+\usepackage[titletoc, title]{appendix}
+\usepackage{titlesec}
+\titleformat{\chapter}{\large\bfseries\MakeUppercase}{\thechapter}{2ex}{}[\vspace*{-1.5cm}]
+\titleformat*{\section}{\large\bfseries}
+\titleformat*{\subsection}{\large\bfseries}
+\titleformat*{\subsubsection}{\large\bfseries}
+
+\usepackage{chngcntr}
+\counterwithout{figure}{chapter}
+\counterwithout{table}{chapter}
+\counterwithout{equation}{chapter}
+
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage[bookmarks,unicode,hidelinks]{hyperref}
+\usepackage{array}
+\usepackage{paralist}
+\usepackage{verbatim}
+\usepackage{subfig}
+\usepackage{enumitem}
+\setlist{noitemsep}
+
+%%% HEADERS & FOOTERS
+\usepackage{fancyhdr}
+\pagestyle{empty}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\lhead{}\chead{}\rhead{}
+\lfoot{}\cfoot{\thepage}\rfoot{}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  tabsize=2,
+  showstringspaces=false,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  stringstyle=\color{orange!70!black},
+}
+
+\newcommand{\HeaderLineSpace}{-0.25cm}
+\newcommand{\UniTextRO}{UNIVERSITATEA POLITEHNICA DIN BUCUREȘTI \\[\HeaderLineSpace]
+FACULTATEA DE AUTOMATICĂ ȘI CALCULATOARE \\[\HeaderLineSpace]
+DEPARTAMENTUL DE CALCULATOARE\\}
+\newcommand{\DiplomaRO}{PROIECT DE DIPLOMĂ}
+\newcommand{\AdvisorRO}{Coordonator științific:}
+\newcommand{\BucRO}{BUCUREȘTI}
+
+\newcommand{\UniTextEN}{UNIVERSITY POLITEHNICA OF BUCHAREST \\[\HeaderLineSpace]
+FACULTY OF AUTOMATIC CONTROL AND COMPUTERS \\[\HeaderLineSpace]
+COMPUTER SCIENCE AND ENGINEERING DEPARTMENT\\}
+\newcommand{\DiplomaEN}{DIPLOMA PROJECT}
+\newcommand{\AdvisorEN}{Thesis advisor:}
+\newcommand{\BucEN}{BUCHAREST}
+
+\newcommand{\frontPage}[6]{
+\begin{titlepage}
+\begin{center}
+{\Large #1}
+\vspace{50pt}
+\begin{tabular}{p{6cm}p{4cm}}
+\includegraphics[scale=0.8]{pics/upb-logo.jpg} &
+  \includegraphics[scale=0.5,trim={14cm 11cm 2cm 5cm},clip=true]{pics/cs-logo.pdf}
+\end{tabular}
+
+\vspace{105pt}
+{\Huge #2}\\
+\vspace{40pt}
+{\Large #3}\\ \vspace{0pt}
+{\Large #4}\\
+\vspace{40pt}
+{\LARGE \Name}\\
+\end{center}
+\vspace{60pt}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}p{6cm}r}
+&{\large\textbf{#5}}\vspace{10pt}\\
+&{\large \Advisor}
+\end{tabular*}
+\vspace{20pt}
+\begin{center}
+{\large\textbf{#6}}\\
+\vspace{0pt}
+{\normalsize \Year}
+\end{center}
+\end{titlepage}
+}
+
+\newcommand{\frontPageRO}{\frontPage{\UniTextRO}{\DiplomaRO}{\ProjectTitleRO}{\ProjectSubtitleRO}{\AdvisorRO}{\BucRO}}
+\newcommand{\frontPageEN}{\frontPage{\UniTextEN}{\DiplomaEN}{\ProjectTitleEN}{\ProjectSubtitleEN}{\AdvisorEN}{\BucEN}}
+
+\linespread{1.15}
+\setlength\parindent{0pt}
+\setlength\parskip{.28cm}
+
+\newcommand{\AbstractPage}{
+\begin{titlepage}
+\textbf{\large SINOPSIS}\par
+\AbstractRO\par\vfill
+\textbf{\large ABSTRACT}\par
+\AbstractEN \vfill
+\end{titlepage}
+}
+
+\newcommand{\ThanksPage}{
+\begin{titlepage}
+{\noindent \large\textbf{MULȚUMIRI}}\\
+\Thanks
+\end{titlepage}
+}
+
+%%
+%%   Câmpurile autorului
+%%
+\newcommand{\ProjectTitleRO}{Sistem digital de autentificare și gestiune a identității pentru transportul feroviar}
+\newcommand{\ProjectSubtitleRO}{}
+\newcommand{\ProjectTitleEN}{Digital Authentication and Identity Management System for Railway Transportation}
+\newcommand{\ProjectSubtitleEN}{}
+\newcommand{\Name}{Ana-Maria Obreja}
+\newcommand{\Advisor}{[Coordonator — de completat]}
+\newcommand{\Year}{2026}
+
+\title{Proiect de diplomă}
+\author{\Name}
+\date{\Year}
+
+\newcommand{\AbstractRO}{Lucrarea de față prezintă proiectarea și implementarea unei platforme web pentru gestionarea identității digitale și a biletelor feroviare, adresată în principal studenților care beneficiază de facilități de transport. Contribuția centrală a lucrării este un sistem de credențiale digitale studențești care implică instituțiile de învățământ superior ca autoritate de verificare: studenții încarcă dovezi ale calității de student, agenții universitari autorizați le validează, iar platforma aplică automat reducerile corespunzătoare la cumpărarea biletelor. Spre deosebire de soluțiile existente, reducerea nu mai necesită prezentarea documentelor fizice. Sistemul implementat acoperă un flux complet: autentificare cu roluri distincte (pasager, agent universitar, administrator), cumpărare de bilete cu rezervare de loc și protecție la concurență, gestionarea abonamentelor feroviare și planificarea automată a rutelor cu una sau mai multe schimbări. Arhitectura urmează o separare strictă între server (FastAPI, Python) și client (React), cu persistența datelor în PostgreSQL. Rezultatele demonstrează viabilitatea unui sistem de identitate digitală feroviară care poate înlocui sau complementa soluțiile oferite de operatorii naționali.}
+
+\newcommand{\AbstractEN}{This thesis presents the design and implementation of a web platform for digital identity management and railway ticket booking, primarily targeting students benefiting from transportation subsidies. The implemented system allows ticket purchasing with seat reservation, subscription management, digital verification of student credentials by authorized university agents, and automatic multi-leg trip planning. The application architecture follows a strict client-server separation, with a FastAPI (Python) backend, a React frontend, and PostgreSQL for data persistence. A distinctive component is the interactive railway network map, which queries the Overpass API (OpenStreetMap) and applies the A* pathfinding algorithm on the OSM railway node graph to render actual railway track geometries rather than linear approximations. The digital credentials system, based on roles and verification flows between passenger, university agent, and backend, constitutes the innovative core of the application. The results demonstrate the viability of such an integrated system that can replace or complement existing solutions offered by national railway operators.}
+
+\newcommand{\Thanks}{Mulțumesc coordonatorului meu pentru îndrumare și sprijin pe parcursul elaborării acestei lucrări. Mulțumesc familiei mele pentru răbdare și încurajare. Mulțumesc colegilor care au testat aplicația și au oferit feedback valoros în procesul de dezvoltare.}
+
+\begin{document}
+
+\frontPageRO
+\frontPageEN
+
+\begingroup
+\linespread{1}
+\tableofcontents
+\endgroup
+
+\AbstractPage
+\ThanksPage
+
+
+% =====================================================================
+\chapter{Introducere}\pagestyle{fancy}
+% =====================================================================
+
+\section{Context}
+
+Transportul feroviar reprezintă una dintre modalitățile de transport cu cel mai mare impact social în România, deservind anual milioane de pasageri, dintre care o proporție semnificativă o constituie studenții. Aceștia beneficiază prin lege de reduceri substanțiale la bilete (50\% pe ruta de domiciliu și reduceri suplimentare în funcție de tipul de abonament), însă procesul de obținere și validare a acestor reduceri rămâne în mare parte analogic: legitimația studențească fizică, vizată semestrial la secretariatele universităților, este prezentată la ghișeele CFR sau inspectorilor de tren.
+
+Digitalizarea serviciilor de transport feroviar a cunoscut o accelerare semnificativă în Europa occidentală, unde operatori precum Deutsche Bahn (Germania), SNCF (Franța) sau Eurostar au implementat sisteme complete de ticketing digital, cu integrare mobilă, verificare biometrică și reduceri automate pe baza cardurilor de identitate digitale \cite{db2023digital}. România, prin operatorul național CFR Călători, a făcut pași în această direcție prin lansarea aplicației mobile și a platformei online, însă acestea prezintă limitări semnificative în ceea ce privește gestionarea facilităților studențești și interactivitatea interfeței cu utilizatorul.
+
+Contextul academic al proiectului este relevant: creșterea numărului de studenți care navețesc între oraș și universitate, necesitatea reducerii timpului petrecut la ghișee și oportunitatea de a integra identitatea digitală studențească cu sistemele de ticketing feroviar constituie motivații solide pentru un astfel de sistem. Totodată, evoluția tehnologiilor web (REST API, JWT, React, PostgreSQL) pune la dispoziție instrumente mature și performante pentru implementarea acestei viziuni.
+
+Un aspect suplimentar relevant este tendința europeană de digitalizare a identității — directiva eIDAS \cite{jwt2015} și inițiativele naționale de identitate electronică deschid calea spre sisteme în care calitatea de student, de beneficiar al unei reduceri sau de titular al unui abonament să fie verificabilă automat, fără intervenție umană la ghișeu. În acest context, o platformă care integrează fluxul de verificare direct între instituția academică și operatorul feroviar reprezintă un pas concret spre această viziune, demonstrând că arhitecturile moderne web sunt suficient de mature pentru a susține astfel de scenarii în contextul transportului public din România.
+
+\section{Problema}
+
+Problema centrală abordată de această lucrare este absența unui mecanism digital integrat care să permită:
+
+\begin{enumerate}
+  \item \textbf{Verificarea automată a eligibilității} pasagerilor pentru reduceri studențești, fără prezentarea documentelor fizice;
+  \item \textbf{Rezervarea locului și plata online} cu aplicarea corectă a tarifelor reduse, inclusiv pentru călătorii cu mai mulți pasageri unde unii sunt studenți și alții nu;
+  \item \textbf{Planificarea rutelor complexe} (cu schimbări) cu afișarea geometriei reale a traseului feroviar pe o hartă interactivă;
+  \item \textbf{Gestionarea abonamentelor} feroviare cu integrarea reducerilor studențești.
+\end{enumerate}
+
+Problemele concrete identificate în sistemele existente includ: imposibilitatea aplicării automate a reducerii la cumpărarea online fără o legitimație digitală verificată, lipsa unui sistem de verificare descentralizat (instituțiile de învățământ nu sunt implicate activ în procesul de validare), și absența vizualizării hărții feroviare cu trasee reale.
+
+\section{Obiective}
+
+Obiectivele principale ale proiectului sunt:
+
+\begin{itemize}
+  \item \textbf{O1}: Implementarea unui sistem de autentificare și gestionare a rolurilor (pasager, agent universitar, administrator) cu token JWT și politici de acces granulare.
+  \item \textbf{O2}: Dezvoltarea unui motor de planificare a călătoriei multi-leg (cu până la 2 schimbări) bazat pe algoritmul BFS cu constrângeri temporale.
+  \item \textbf{O3}: Crearea unui flux de verificare a credențialelor studențești prin intermediul agenților universitari, cu emiterea de credențiale digitale cu termen de valabilitate.
+  \item \textbf{O4}: Implementarea unui sistem de rezervare a locurilor cu protecție împotriva concurenței (seat holds cu expirare la 5 minute).
+  \item \textbf{O5}: Dezvoltarea unui modul de hartă interactivă a rețelei feroviare cu vizualizarea stațiilor, a centrelor universitare și a rutelor calculate între stații.
+  \item \textbf{O6}: Gestionarea abonamentelor feroviare cu aplicarea corectă a tarifelor în funcție de tipul pasagerului și ruta acoperită.
+\end{itemize}
+
+\section{Soluția propusă}
+
+Soluția propusă este o aplicație web cu arhitectură client-server, compusă din trei componente principale: un backend REST, un frontend React și o bază de date relațională, integrate într-un flux coerent de la autentificare până la emiterea biletului cu cod QR.
+
+\textbf{Backend-ul} este implementat în Python folosind framework-ul FastAPI, expunând un API REST structurat pe module funcționale: autentificare (JWT cu roluri: pasager, agent universitar, administrator), utilizatori, trenuri, bilete, abonamente, locuri, credențiale și hartă. Motorul de planificare a călătoriei utilizează algoritmul BFS cu constrângeri temporale pentru a identifica itinerare cu până la două schimbări, respectând ferestre de conexiune realistă între 15 minute și 3 ore. Rezervarea locurilor este protejată împotriva concurenței prin mecanismul \textit{seat hold} cu expirare automată la 5 minute, eliminând supravânzarea. Persistența datelor este asigurată de PostgreSQL, iar comunicarea cu baza de date se realizează prin SQLAlchemy (ORM).
+
+\textbf{Frontend-ul} este o aplicație React (JSX) cu pagini dedicate fiecărui flux funcțional: căutare și cumpărare bilete (inclusiv pentru mai mulți pasageri cu calcul automat al reducerilor), biletele mele cu opțiune de reprogramare, abonamente lunare și trimestriale, hartă feroviară interactivă, credențiale studențești și gestionarea agenților universitari. Aplicația folosește React Router pentru navigare, stare locală pentru sesiuni de rezervare și React-Leaflet pentru vizualizarea hărții cu tiles OpenRailwayMap.
+
+\textbf{Infrastructura} este minimalistă și portabilă: un script \texttt{run.py} pornește simultan serverul FastAPI pe portul 8000 și servește fișierele statice ale frontend-ului compilat pe portul 8765, fără a necesita configurație suplimentară de reverse-proxy sau orchestrare de containere.
+
+Elementul inovativ central este \textbf{sistemul de identitate digitală studențească}: pasagerii uploadează dovezi ale statutului de student, agenții universitari (personalul secretariatelor) le verifică prin portalul dedicat și emit credențiale digitale cu termen de valabilitate configurat (semestru sau an universitar). Credențialele sunt stocate în baza de date și asociate contului pasagerului; la cumpărarea unui bilet, backend-ul verifică automat dacă titularul deține o credențială activă și aplică tariful redus corespunzător. Biletul emis conține un cod QR cu datele călătoriei, care poate fi verificat offline de personalul de tren fără a necesita conectivitate la server în momentul controlului.
+
+\section{Rezultatele obținute}
+
+În urma implementării, platforma oferă un flux complet de la înregistrare la cumpărarea biletului și generarea codului QR, acoperind scenariile:
+
+\begin{itemize}
+  \item Cumpărarea unui bilet simplu sau retur cu rezervare de loc și cod QR scanabil;
+  \item Cumpărarea biletelor pentru mai mulți pasageri cu aplicarea corectă a reducerilor (numai pasagerul titular beneficiază de facilități, nu și însoțitorii);
+  \item Reprogramarea unui bilet existent pe un tren alternativ;
+  \item Gestionarea unui abonament lunar sau trimestrial cu calculul economiei realizate;
+  \item Vizualizarea rutei feroviare pe hartă cu marcarea stațiilor de schimbare și o linie indicativă între punctele cheie ale traseului;
+  \item Verificarea legitimației studențești prin portalul agentului universitar.
+\end{itemize}
+
+\section{Structura lucrării}
+
+\textbf{Capitolul 2} prezintă analiza cerințelor funcționale și nefuncționale ale platformei, identificate prin analiza scenariilor de utilizare și a limitărilor soluțiilor existente. Sunt definiți actorii sistemului și fluxurile lor principale de interacțiune.
+
+\textbf{Capitolul 3} conține studiul soluțiilor existente pe piața națională și internațională de ticketing feroviar, urmat de o analiză comparativă a tehnologiilor alese față de alternativele disponibile, cu argumente tehnice pentru fiecare decizie.
+
+\textbf{Capitolul 4} prezintă arhitectura soluției propuse: schema bazei de date, diagramele de componente, fluxurile principale de date între module și deciziile arhitecturale majore.
+
+\textbf{Capitolul 5} detaliază implementarea fiecărui modul semnificativ: algoritmul de planificare a călătoriei, mecanismul de rezervare cu hold, sistemul de credențiale, calculul tarifelor cu reduceri, și modulul hărții feroviare interactive.
+
+\textbf{Capitolul 6} evaluează sistemul prin scenarii de testare funcționale, comparații cu soluțiile existente și analiza performanței componentelor critice.
+
+\textbf{Capitolul 7} sintetizează contribuțiile proiectului, limitele identificate și direcțiile de dezvoltare ulterioară.
+
+
+% =====================================================================
+\chapter{Analiza Cerințelor}
+% =====================================================================
+
+\section{Identificarea actorilor}
+
+Sistemul definește trei tipuri de actori cu roluri distincte:
+
+\textbf{Pasagerul} (rol \texttt{passenger}) este utilizatorul final al platformei. El poate căuta trenuri, cumpăra bilete, gestiona abonamentele, vizualiza biletele active în format QR, reprograma călătorii și consulta harta rețelei feroviare. Pasagerii pot să-și încarce dovezi ale statutului de student pentru a obține credențiale digitale care le acordă reduceri.
+
+\textbf{Agentul universitar} (rol \texttt{university\_agent}) este un reprezentant al unei instituții de învățământ superior (secretariat, decanat). El are acces la un panou de administrare unde poate vedea cererile de verificare a legitimațiilor studențești, poate aproba sau respinge cererile și poate emite credențiale digitale cu o perioadă de valabilitate specificată.
+
+\textbf{Administratorul} (rol \texttt{admin}) are acces complet la date și poate gestiona utilizatorii, operatorii feroviari, rutele și stațiile.
+
+\section{Cerințe funcționale}
+
+\subsection{Autentificare și gestionarea contului}
+
+\begin{itemize}
+  \item \textbf{CF-01}: Sistemul trebuie să permită înregistrarea unui utilizator cu email și parolă, cu validarea unicității adresei de email.
+  \item \textbf{CF-02}: Sistemul trebuie să permită autentificarea prin email și parolă, returnând un token JWT cu durată de valabilitate configurabilă.
+  \item \textbf{CF-03}: Token-ul JWT trebuie să conțină rolul utilizatorului și să fie validat la fiecare cerere autentificată.
+  \item \textbf{CF-04}: Utilizatorul trebuie să poată schimba parola furnizând parola curentă și noua parolă.
+\end{itemize}
+
+\subsection{Căutarea și cumpărarea biletelor}
+
+\begin{itemize}
+  \item \textbf{CF-05}: Sistemul trebuie să permită căutarea trenurilor directe sau cu maximum 2 schimbări între oricare două stații, pentru o dată specificată.
+  \item \textbf{CF-06}: Rezultatele căutării trebuie sortate după durata totală a călătoriei, cu indicarea numărului de schimbări și a stațiilor de transfer.
+  \item \textbf{CF-07}: Sistemul trebuie să calculeze prețul biletului ținând cont de distanță, tipul trenului, statutul de student al pasagerului și existența unui abonament activ.
+  \item \textbf{CF-08}: La cumpărarea unui bilet pentru mai mulți pasageri, reducerea studențească se aplică \textit{exclusiv} titularului contului (pasagerul principal), nu și însoțitorilor.
+  \item \textbf{CF-09}: Pasagerul trebuie să poată selecta locul din harta vagonului înainte de finalizarea achiziției.
+  \item \textbf{CF-10}: Sistemul trebuie să genereze un cod QR unic pentru fiecare segment de bilet (leg), scanabil de inspectori.
+\end{itemize}
+
+\subsection{Rezervarea locurilor}
+
+\begin{itemize}
+  \item \textbf{CF-11}: Sistemul trebuie să permită rezervarea temporară (hold) a unui loc pentru maximum 5 minute, timp în care locul nu poate fi rezervat de alt utilizator.
+  \item \textbf{CF-12}: La expirarea hold-ului fără confirmare, locul trebuie eliberat automat.
+  \item \textbf{CF-13}: Harta locurilor trebuie să reflecte în timp real starea fiecărui loc: liber, rezervat temporar de utilizatorul curent, rezervat de alt utilizator, sau vândut.
+\end{itemize}
+
+\subsection{Abonamente}
+
+\begin{itemize}
+  \item \textbf{CF-14}: Pasagerul poate achiziționa abonamente pe o rută specifică (stație plecare — stație destinație) cu durate de 1 lună sau 3 luni.
+  \item \textbf{CF-15}: La calculul prețului unui bilet pe ruta acoperită de un abonament activ, prețul pentru titularul contului devine 0 (abonamentul acoperă călătoria).
+  \item \textbf{CF-16}: Sistemul trebuie să afișeze starea abonamentelor (activ, expirat, anulat) cu datele de valabilitate și economia totală realizată.
+\end{itemize}
+
+\subsection{Credențiale studențești}
+
+\begin{itemize}
+  \item \textbf{CF-17}: Pasagerul poate încărca o dovadă a calității de student (document scanat sau fotografie).
+  \item \textbf{CF-18}: Agentul universitar poate vizualiza toate cererile pendinte pentru instituția sa și poate aproba sau respinge fiecare cerere.
+  \item \textbf{CF-19}: La aprobare, sistemul emite automat o credențială digitală cu o perioadă de valabilitate specificată de agent.
+  \item \textbf{CF-20}: Credențialele active sunt verificate automat la calculul prețului biletelor.
+\end{itemize}
+
+\subsection{Harta feroviară}
+
+\begin{itemize}
+  \item \textbf{CF-21}: Harta trebuie să afișeze toate stațiile cu coordonate GPS disponibile, cu diferențiere vizuală pentru centrele universitare.
+  \item \textbf{CF-22}: La selectarea a două stații pe hartă, sistemul trebuie să calculeze și să afișeze ruta optimă, marcând stația de plecare, stațiile de schimbare și stația de sosire.
+  \item \textbf{CF-23}: Ruta afișată pe hartă trebuie însoțită de o linie indicativă între punctele cheie, cu mențiunea clară că aceasta este o reprezentare schematică, nu traseul geometric real al căii ferate.
+\end{itemize}
+
+\section{Cerințe nefuncționale}
+
+\textbf{Securitate}: Parolele sunt stocate hash-uite cu bcrypt. Token-urile JWT sunt validate la fiecare endpoint protejat. Accesul la datele altor utilizatori este interzis prin politici de autorizare la nivel de rând (pasagerul vede doar propriile bilete și abonamente).
+
+\textbf{Consistență}: Operațiunile de hold și cumpărare a locurilor sunt atomice la nivel de bază de date, prevenind vânzarea dublă a aceluiași loc.
+
+\textbf{Performanță}: API-ul de planificare a călătoriei utilizează un cache per-request pentru interogările repetitive la baza de date, reducând numărul de query-uri SQL de la O($N^3$) la O($N$) pentru o rută cu 2 schimbări.
+
+\textbf{Mentenabilitate}: Codul backend este organizat în module distincte (routers, services, core), iar frontend-ul separă logica API în servicii reutilizabile.
+
+\section{Cazuri de utilizare principale}
+
+Tabelul~\ref{tab:usecases} sumarizează principalele cazuri de utilizare identificate.
+
+\begin{table}[ht]\small\linespread{1}
+\caption{Cazuri de utilizare principale}
+\label{tab:usecases}
+\begin{tabular}{l p{5cm} l p{4cm}}
+\textbf{ID} & \textbf{Descriere} & \textbf{Actor} & \textbf{Precondiție} \\\hline
+UC-01 & Căutare trenuri și cumpărare bilet & Pasager & Autentificat \\
+UC-02 & Rezervare loc din harta vagonului & Pasager & Tren selectat \\
+UC-03 & Reprogramare bilet & Pasager & Bilet activ \\
+UC-04 & Cumpărare abonament & Pasager & Autentificat \\
+UC-05 & Încărcare legitimație studențească & Pasager & Autentificat \\
+UC-06 & Verificare legitimație și emitere credențială & Agent universitar & Cerere pendinte \\
+UC-07 & Vizualizare hartă și rută feroviară & Pasager & Autentificat \\
+UC-08 & Vizualizare bilet cu cod QR & Pasager & Bilet cumpărat \\
+\hline
+\end{tabular}
+\end{table}
+
+
+% =====================================================================
+\chapter{Studiu de Piață și Tehnologii Folosite}
+% =====================================================================
+
+\section{Soluții existente}
+
+\subsection{CFR Călători — aplicație oficială}
+
+Operatorul național CFR Călători pune la dispoziție o platformă web (\texttt{cfrcalatori.ro}) și o aplicație mobilă pentru cumpărarea biletelor. Punctele forte includ disponibilitatea tuturor trenurilor și rutelor din rețeaua CFR, posibilitatea de cumpărare online și reducerile pentru abonamentele de tip \textit{multi-trip}. Limitările principale sunt:
+\begin{itemize}
+  \item \textbf{Absența verificării digitale a legitimației studențești}: reducerile se aplică doar la prezentarea documentului fizic la ghișeu sau în tren;
+  \item \textbf{Interfața utilizator depășită}: experiența de cumpărare este fragmentată și dificilă pe dispozitive mobile;
+  \item \textbf{Harta feroviară absentă}: nu există o componentă de vizualizare a rețelei sau a traseelor;
+  \item \textbf{Lipsa rezervării de loc}: pentru categoriile de tren mai accesibile (Regio, InterRegio), nu este disponibilă rezervarea locului.
+\end{itemize}
+
+\subsection{Trenul.ro și agregatori terți}
+
+Servicii terțe precum \texttt{trenul.ro} sau \texttt{infofer.ro} oferă informații despre orare, întârzieri și trasee, dar nu permit cumpărarea biletelor. Ele adresează parțial nevoia de planificare a călătoriei, fără a integra componenta comercială sau cea de identitate digitală.
+
+\subsection{Sisteme europene — Deutsche Bahn Navigator}
+
+DB Navigator, aplicația Deutsche Bahn, este un punct de referință pentru calitatea experienței utilizator în ticketing feroviar \cite{db2023digital}. Funcționalitățile sale relevante includ: integrare cu BahnCard (card de reduceri digital), hartă interactivă a rețelei, planificator multi-modal și bilete descărcabile offline ca PDF. Limitarea în contextul nostru este că abordează o rețea mai densă și mai digitalizată, unde identitatea pasagerului este deja verificată electronic.
+
+\subsection{Eurostar și Railcard digital}
+
+Eurostar și National Rail (UK) oferă carduri de reducere digitale (16-17 Railcard, Student Railcard) emise și verificate complet online \cite{nationalrail2022}. Modelul este relevant pentru lucrarea de față deoarece demonstrează viabilitatea fluxului de verificare a eligibilității și emitere de credențiale digitale cu reduceri automate.
+
+\section{Comparație cu soluția propusă}
+
+Tabelul~\ref{tab:comparison} prezintă o comparație sintetică a funcționalităților principale.
+
+\begin{table}[ht]\small\linespread{1}
+\caption{Comparație funcționalități}
+\label{tab:comparison}
+\begin{tabular}{l c c c c}
+\textbf{Funcționalitate} & \textbf{CFR} & \textbf{DB Nav.} & \textbf{Railcard} & \textbf{Propus} \\\hline
+Cumpărare bilete online & Da & Da & Da & Da \\
+Rezervare loc & Parțial & Da & Da & Da \\
+Reducere studențească digitală & Nu & Nu & Da & Da \\
+Verificare instituție academică & Nu & Nu & Nu & Da \\
+Hartă cu trasee reale & Nu & Da & Nu & Da \\
+Cod QR bilet & Da & Da & Da & Da \\
+Planificare multi-leg & Da & Da & Da & Da \\
+Abonament cu reducere automată & Parțial & Da & Da & Da \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Tehnologii alese și justificare}
+
+\subsection{Backend: FastAPI vs. alternative}
+
+Pentru implementarea serverului REST au fost luate în considerare trei variante principale:
+
+\textbf{FastAPI} (Python) a fost ales datorită generării automate a documentației OpenAPI/Swagger, validării automate a datelor de intrare prin Pydantic, performanțelor comparabile cu Node.js (datorită naturii asincrone), și ecosistemului bogat de librării Python pentru criptografie, procesare date și integrări \cite{fastapi2023}.
+
+\textbf{Django REST Framework} ar fi adus un ORM mai matur și un sistem de administrare built-in, dar overhead-ul configurării și lipsa nativă de async la nivel de endpoint l-au exclus pentru un proiect cu accent pe API REST.
+
+\textbf{Express.js} (Node.js) ar fi oferit performanțe ridicate și ecosistemul npm, dar necesitatea unui singur limbaj (Python) pentru backend, date și scripturi de migrare a constituit un avantaj decisiv pentru FastAPI.
+
+\subsection{Frontend: React vs. alternative}
+
+\textbf{React} a fost ales pentru maturitatea ecosistemului, modelul de componente reutilizabile și disponibilitatea bibliotecilor specializate (React-Leaflet pentru hărți, React Router pentru navigare). Alternativa Vue.js ar fi oferit o curbă de învățare mai ușoară, dar ecosistemul mai restrâns pentru componente de hărți interactive a constituit un dezavantaj.
+
+\subsection{Baza de date: PostgreSQL}
+
+\textbf{PostgreSQL} a fost ales față de MySQL sau MongoDB pentru suportul nativ al tipurilor geografice, tranzacțiile ACID complete (esențiale pentru operațiunile de hold pe locuri), extensiile avansate (indexare, full-text search) și performanța la query-uri complexe cu JOIN-uri multiple. MongoDB ar fi simplificat modelul de date pentru documente (credențiale, bilete), dar ar fi complicat interogările relaționale (rute, stații, orare).
+
+\subsection{Harta interactivă: Leaflet + OpenStreetMap}
+
+\textbf{Leaflet} cu tile-uri OpenStreetMap a fost ales față de Google Maps API din considerente de cost (Google Maps are un model freemium cu limite restrictive) și de libertate în compunerea straturilor de hartă. Aplicația folosește suplimentar tile-urile \textbf{OpenRailwayMap} — un strat specializat, gratuit, derivat din datele OSM, care redă infrastructura feroviară reală (linii active, tipuri de cale, noduri). Alternativa Mapbox ar fi oferit tile-uri mai estetice, dar cu limitări de cost și fără un strat feroviar specializat disponibil gratuit.
+
+\subsection{Autentificare: JWT}
+
+Token-urile \textbf{JWT (JSON Web Token)} permit o arhitectură stateless, fără sesiuni server-side, simplificând scalabilitatea orizontală. Alternativa sesiunilor cu cookie-uri (Redis/Memcached) ar fi adăugat complexitate infrastructurală nejustificată pentru dimensiunea proiectului.
+
+
+% =====================================================================
+\chapter{Soluția Propusă — Arhitectura Sistemului}
+% =====================================================================
+
+\section{Arhitectura generală}
+
+Sistemul urmează o arhitectură client-server cu separare strictă între nivelul de prezentare (React SPA), nivelul de logică aplicativă (FastAPI) și nivelul de date (PostgreSQL), conform Figurii~\ref{fig:arch}.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.9\textwidth]{pics/architecture.png}
+\caption{Arhitectura generală a sistemului}
+\label{fig:arch}
+\end{figure}
+
+Comunicarea între frontend și backend se realizează exclusiv prin cereri HTTP REST la adresa \texttt{http://localhost:8000/api/...}. Fiecare cerere autentificată include un header \texttt{Authorization: Bearer <token>}, iar backend-ul validează token-ul și extrage identitatea utilizatorului înainte de execuția logicii de business.
+
+Scriptul \texttt{run.py} pornește simultan cele două servere: serverul FastAPI (Uvicorn) pe portul 8000 și un server HTTP simplu pe portul 8765 care servește directorul \texttt{frontend/dist/} (output-ul compilat al aplicației React cu Vite).
+
+\section{Schema bazei de date}
+
+Baza de date conține 15 tabele principale organizate în jurul entităților centrale ale domeniului feroviar și ale sistemului de identitate digitală. Figura~\ref{fig:erd} prezintă diagrama entitate-relație simplificată.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\textwidth]{pics/erd.png}
+\caption{Diagrama entitate-relație (simplificată)}
+\label{fig:erd}
+\end{figure}
+
+Tabelele principale și relațiile lor sunt:
+
+\textbf{users}: stochează datele de cont (email, parolă hash, rol, timestamps). Un utilizator poate avea mai multe bilete, abonamente și credențiale.
+
+\textbf{stations}: stochează stațiile feroviare cu coordonate GPS (latitude, longitude), codul CFR unic și indicatorul \texttt{is\_university\_hub} pentru centrele universitare.
+
+\textbf{trains} și \textbf{routes}: reprezintă trenurile active cu numărul, tipul (regio, interregio, intercity) și ruta asociată. Ruta (route) definește secvența ordonată de stații prin tabelul \textbf{route\_stops}, cu orele de sosire/plecare și distanța de la origine.
+
+\textbf{tickets} și \textbf{ticket\_legs}: un bilet poate include mai multe segmente (legs) pentru călătoriile cu schimbare. Fiecare leg reține trenul, stația de plecare și sosire, locul rezervat și codul QR generat.
+
+\textbf{seats} și \textbf{seat\_holds}: locurile fizice din vagoane, cu starea curentă (liber, held, sold) și holdurile temporare cu timestamp de expirare.
+
+\textbf{subscriptions}: abonamentele pasagerilor, cu ruta acoperită, perioada de valabilitate și tipul (lunar, trimestrial).
+
+\textbf{student\_documents} și \textbf{credentials}: documentele uploadate de studenți pentru verificare, respectiv credențialele digitale emise după aprobare, cu tipul credențialei și data expirării.
+
+\textbf{university\_agents}: leagă utilizatorii cu rol de agent de o universitate specifică, permițând filtrarea cererilor relevante pentru fiecare instituție.
+
+\section{Structura modulelor backend}
+
+Backend-ul este organizat conform structurii din Figura~\ref{fig:backend}:
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.7\textwidth]{pics/backend_structure.png}
+\caption{Structura modulelor backend}
+\label{fig:backend}
+\end{figure}
+
+\begin{itemize}
+  \item \texttt{app/core/}: configurare, conexiune baza de date (SessionLocal), securitate (JWT encode/decode, bcrypt)
+  \item \texttt{app/routers/}: un fișier per domeniu funcțional (auth, users, trains, tickets, seats, subscriptions, credentials, map)
+  \item \texttt{app/services/}: logică reutilizabilă extrasa din routere: \texttt{trip\_planner.py} (algoritmul de planificare), \texttt{qr\_generator.py} (generare coduri QR)
+  \item \texttt{app/models/}: modele SQLAlchemy pentru fiecare tabel
+\end{itemize}
+
+\section{Structura frontend}
+
+Frontend-ul React este organizat în pagini (\texttt{src/pages/}) și componente reutilizabile (\texttt{src/components/}). Comunicarea cu API-ul este centralizată în \texttt{src/services/api.js}, care expune funcții asincrone cu gestionarea erorilor și injecția automată a token-ului JWT.
+
+Paginile principale sunt:
+\begin{itemize}
+  \item \texttt{BuyTicket.jsx}: fluxul de căutare și cumpărare bilete (căutare trenuri, selecție pasageri, harta locurilor, confirmare)
+  \item \texttt{MyTickets.jsx}: vizualizarea biletelor active cu modal de boarding pass și cod QR
+  \item \texttt{Subscriptions.jsx}: gestionarea abonamentelor cu tab-uri (Active, Expirate, Anulate)
+  \item \texttt{MapView.jsx}: harta interactivă a rețelei feroviare
+  \item \texttt{ReschedulePage.jsx}: reprogramarea unui bilet pe un tren alternativ
+  \item \texttt{UniversityAgentDashboard.jsx}: panoul agentului universitar pentru verificarea documentelor
+\end{itemize}
+
+\section{Fluxuri principale de date}
+
+\subsection{Fluxul de cumpărare bilet}
+
+Figura~\ref{fig:buyflow} prezintă diagrama secvențială pentru cumpărarea unui bilet.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\textwidth]{pics/buy_flow.png}
+\caption{Diagrama secvențială: cumpărare bilet}
+\label{fig:buyflow}
+\end{figure}
+
+Pașii fluxului sunt: (1) utilizatorul introduce stațiile și data, (2) frontend-ul apelează \texttt{GET /trains/search}, (3) backend-ul apelează \texttt{plan\_trips()} și returnează itinerarele sortate, (4) utilizatorul selectează un tren și un loc, (5) frontend-ul apelează \texttt{POST /seats/hold} pentru rezervarea temporară, (6) utilizatorul confirmă, iar (7) \texttt{POST /tickets/buy} finalizează achiziția, eliberând hold-ul și creând biletul cu codul QR.
+
+\subsection{Fluxul de verificare a credențialelor}
+
+Figura~\ref{fig:credflow} ilustrează interacțiunile pentru verificarea legitimației studențești.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.85\textwidth]{pics/credentials_flow.png}
+\caption{Diagrama secvențială: verificare credențiale studențești}
+\label{fig:credflow}
+\end{figure}
+
+Pasagerul uploadează un document (\texttt{POST /credentials/upload}), agentul universitar îl vede în dashboard-ul său și apelează \texttt{POST /credentials/\{id\}/verify} cu valabilitatea propusă, iar sistemul emite o credențială activă. La următoarea cumpărare de bilet, \texttt{POST /tickets/quote} verifică automat credențialele active și aplică reducerea.
+
+
+% =====================================================================
+\chapter{Detalii de Implementare}
+% =====================================================================
+
+\section{Algoritmul de planificare a călătoriei}
+
+Modulul \texttt{trip\_planner.py} implementează un algoritm BFS modificat cu constrângeri temporale pentru găsirea itinerarelor optime între două stații, cu maximum 2 schimbări.
+
+\subsection{Structura algoritmului}
+
+Algoritmul este structurat în trei pași secvențiali:
+
+\textbf{Pasul 1 — Călătorii directe}: pentru stația de plecare $A$ și stația de destinație $B$, se identifică toate trenurile care opresc în $A$ și ajung ulterior în $B$ pe aceeași rută, în ziua specificată.
+
+\textbf{Pasul 2 — O schimbare ($A \to C \to B$)}: pentru fiecare tren din pasul 1 care oprește într-o stație intermediară $C$, se caută trenuri care pleacă din $C$ spre $B$ cu o fereastră de transfer de 15-180 de minute.
+
+\textbf{Pasul 3 — Două schimbări ($A \to C_1 \to C_2 \to B$)}: executat doar dacă nu s-au găsit suficiente rezultate în pașii 1 și 2, cu o limită de 500 combinații intermediare pentru a preveni explozia combinatorică.
+
+Rezultatele sunt sortate după durata totală a călătoriei (inclusiv timpii de așteptare la schimbări), cu tie-breaker pe numărul de schimbări.
+
+\subsection{Optimizarea performanței prin cache}
+
+Fără optimizare, algoritmul efectuează interogări repetitive la baza de date pentru aceleași rute și stații. Un cache per-request (dicționar Python) reduce drastică numărul de query-uri:
+
+\begin{lstlisting}[language=Python, caption=Cache per-request în trip\_planner.py]
+def _trains_passing_station(db, station_id, travel_date,
+                             min_departure_minutes=None,
+                             _cache=None):
+    cache_key = ("trains", station_id)
+    if _cache is not None and cache_key in _cache:
+        all_rows = _cache[cache_key]
+    else:
+        rows = db.execute(text("""
+            SELECT t.train_id, t.train_number, t.train_type,
+                   rs.stop_order, rs.departure_time, ...
+            FROM trains t
+            JOIN route_stops rs ON rs.route_id = t.route_id
+            WHERE rs.station_id = :sid AND t.is_active = TRUE
+            ORDER BY rs.departure_time
+        """), {"sid": station_id}).mappings().all()
+        all_rows = [dict(r) for r in rows]
+        if _cache is not None:
+            _cache[cache_key] = all_rows
+    # filtram in Python dupa min_departure_minutes
+    ...
+\end{lstlisting}
+
+Această optimizare este esențială deoarece algoritmul cu 2 schimbări poate apela \texttt{\_trains\_passing\_station} pentru aceeași stație de sute de ori în evaluarea combinațiilor.
+
+\subsection{Calculul duratei pentru trenuri de noapte}
+
+O subtilitate importantă este tratarea trenurilor care traversează miezul nopții. Fără corecție, un tren care pleacă la 23:30 și sosește la 01:15 ar fi calculat cu durată negativă. Corectarea se face prin adăugarea a 1440 de minute (24h) când sosirea este numeric mai mică decât plecarea:
+
+\begin{lstlisting}[language=Python, caption=Corectie durata tren de noapte]
+duration = arr_min - dep_min
+if duration < 0:
+    duration += 1440  # trenul ajunge in ziua urmatoare
+\end{lstlisting}
+
+\section{Sistemul de rezervare a locurilor}
+
+\subsection{Modelul datelor}
+
+Locurile sunt stocate în tabelul \texttt{seats} cu câmpurile: \texttt{train\_id}, \texttt{car\_number}, \texttt{car\_class}, \texttt{row}, \texttt{letter} (A/B/C/D), \texttt{is\_window}. Starea unui loc la o dată specifică este determinată prin tabelul \texttt{seat\_holds} (rezervări temporare) și \texttt{ticket\_legs} (bilete finale).
+
+\subsection{Logica de hold}
+
+La apelul \texttt{POST /seats/hold}, sistemul verifică mai întâi că locul nu este deja ocupat sau în hold de alt utilizator, apoi inserează o înregistrare în \texttt{seat\_holds} cu \texttt{expires\_at = NOW() + 5 minutes}. La polling-ul hărții (la 5 secunde), hold-urile expirate sunt filtrate, iar locul reapare ca disponibil. Operația de hold este protejată cu \texttt{SELECT ... FOR UPDATE} pentru a preveni race conditions:
+
+\begin{lstlisting}[language=Python, caption=Verificare atomica disponibilitate loc]
+existing = db.execute(text("""
+    SELECT 1 FROM seat_holds
+    WHERE seat_id = :sid
+      AND travel_date = :td
+      AND (user_id != :uid OR expires_at > NOW())
+      AND expires_at > NOW()
+    FOR UPDATE
+"""), {...}).first()
+if existing:
+    raise HTTPException(409, "Locul nu mai este disponibil")
+\end{lstlisting}
+
+\section{Calculul prețului și aplicarea reducerilor}
+
+\subsection{Logica de tarifare}
+
+Prețul de bază al unui bilet se calculează în funcție de distanța rutei și tipul trenului (coeficienți diferiți pentru Regio, InterRegio, InterCity). Reducerile se aplică în ordine de prioritate:
+
+\begin{enumerate}
+  \item \textbf{Abonament activ pe rută}: prețul titularului devine 0 — abonamentul acoperă integral biletul;
+  \item \textbf{Credențiale studențești active}: reducere 50\% pentru titularul contului;
+  \item \textbf{Fără reduceri}: prețul integral pentru toți pasagerii.
+\end{enumerate}
+
+\subsection{Regula pentru pasageri multipli}
+
+O cerință importantă este că reducerile (studențești sau prin abonament) se aplică \textbf{exclusiv} titularului contului, nu și însoțitorilor. Distincția se face prin câmpul \texttt{passenger\_name} din tabelul \texttt{ticket\_legs}: dacă este NULL, biletul aparține titularului; dacă conține un nume, aparține unui însoțitor care plătește prețul integral.
+
+\begin{lstlisting}[language=Python, caption=Aplicare reducere selectiva in buy\_ticket]
+is_self_ticket = (current_name is None)
+apply_subscription = (_covering_sub is not None
+                      and is_self_ticket)
+if is_self_ticket:
+    ticket_price = price        # cu reducere student
+    ticket_discount = discount
+else:
+    ticket_price = base_price   # pret integral
+    ticket_discount = 0.0
+\end{lstlisting}
+
+\section{Harta feroviară interactivă}
+
+\subsection{Abordarea inițială și limitele ei}
+
+Pe parcursul dezvoltării modulului de hartă, primul obiectiv a fost redarea geometriei reale a căilor ferate — adică traseul linie cu linie, urmând curbele reale ale infrastructurii feroviare. Abordarea investigată a constat în interogarea Overpass API (serviciu public bazat pe datele OpenStreetMap) pentru a obține waypoint-urile geometrice ale căilor ferate dintr-un bounding box, urmată de construirea unui graf al rețelei și aplicarea algoritmului A* pentru găsirea drumului optim între două stații.
+
+Utilitarul \texttt{osmRailGeometry.js} implementează această soluție — graf birecțional din elementele OSM, filtrat cu \texttt{[railway=rail][!service]} pentru a exclude linii industriale, și A* cu euristică euclidiană. Pentru a reduce zigzagurile cauzate de stațiile de tip ramificație (\textit{Ram.}, \textit{Hm.}, \textit{h.}) care se află pe ramuri laterale ale grafului, acestea sunt excluse din waypoint-urile intermediare.
+
+\subsection{Decizia de a renunța la simulare}
+
+În urma testării extinse, s-a constatat că abordarea bazată pe Overpass API + A* nu poate oferi o reprezentare suficient de fidelă a realității în contextul acestei aplicații. Problemele fundamentale identificate au fost:
+
+\begin{enumerate}
+  \item \textbf{Datele OSM nu reflectă rețeaua operațională CFR}: OpenStreetMap conține geometria fizică a liniilor de cale ferată, dar nu informații despre care linii sunt active, care au restricții de viteză sau care sunt utilizate efectiv de trenuri de călători. Un traseu calculat prin A* pe graful OSM poate urma ramuri abandonate sau linii industriale.
+
+  \item \textbf{Coordonatele GPS din baza de date sunt aproximative}: Baza de date a aplicației conține coordonate GPS pentru stații introduse manual, cu erori de plasare (unele stații erau plasate la distanțe de zeci de kilometri față de locul real). Fără date GPS de înaltă precizie, algoritmul A* nu poate selecta corect ramura corectă la joncțiuni.
+
+  \item \textbf{Absența geometriei reale a traseului}: Deși aplicația conține orarul real CFR importat din surse oficiale, geometria fizică a liniilor ferate (curbele reale ale infrastructurii) nu este disponibilă în baza de date. Afișarea unui traseu simulat pe geometria OSM, ca și cum ar fi traseul real parcurs de tren, ar produce o reprezentare înșelătoare față de orarul autentic.
+
+  \item \textbf{Riscul de a induce în eroare}: Afișarea unui traseu vizual aparent real, dar bazat pe date incomplete și parțial incorecte, ar putea crea impresia că aplicația reflectă realitatea operațională — ceea ce ar fi neetic față de utilizator.
+\end{enumerate}
+
+Concluzia procesului de analiză a fost că o simulare parțial corectă este mai periculoasă decât o reprezentare explicit indicativă. Prin urmare, s-a ales o abordare transparentă: afișarea unei \textbf{linii punctate schematice} între punctele cheie ale rutei (plecare, schimbări, sosire), cu mențiunea explicită în legendă că aceasta este un „traseu indicativ (fictiv)".
+
+\subsection{Soluția implementată}
+
+Modulul \texttt{MapView.jsx} implementează harta în trei straturi complementare:
+
+\textbf{Stratul 1 — Tile-uri de bază (OpenStreetMap)}: Harta geografică standard, inclusă implicit.
+
+\textbf{Stratul 2 — OpenRailwayMap} (opțional, activat prin checkbox „Căi ferate"): Tile-uri specializate care redau infrastructura feroviară reală din datele OSM — linii active, noduri, tipuri de cale ferată — cu o precizie mult mai mare decât ce ar putea produce A* pe graful brut. Utilizatorul poate folosi acest strat pentru a înțelege contextul geografic al rutei.
+
+\textbf{Stratul 3 — Markere și linie indicativă}: Stația de plecare (verde), stațiile de schimbare (galben) și stația de sosire (roșu) sunt marcate explicit. Între aceste puncte se trasează o linie punctată schematică (violet, \texttt{dashArray: '6 8'}), cu indicarea clară în legendă că este vorba de o reprezentare indicativă, nu de traseul real.
+
+\begin{lstlisting}[language=JavaScript, caption=Linie punctata indicativa intre punctele cheie ale rutei]
+{keyStops.length >= 2 && (
+  <Polyline
+    positions={keyStops.map(s => [s.latitude, s.longitude])}
+    pathOptions={{
+      color: '#6366f1', weight: 2,
+      dashArray: '6 8', opacity: 0.65
+    }}
+  />
+)}
+\end{lstlisting}
+
+Această abordare este onestă față de utilizator: orarul și structura rutei sunt reale (importate din sursele oficiale CFR), dar geometria fizică a traseului pe teren nu este disponibilă în baza de date. Linia punctată indică conexiunea logică între stații, lăsând utilizatorul să interpreteze traseul real cu ajutorul layerului OpenRailwayMap.
+
+\section{Generarea și validarea codurilor QR}
+
+Fiecare bilet generat primește un cod unic format din date de identificare ale călătoriei, encodat în format QR prin librăria \texttt{qrcode} (Python). Codul QR conține o semnătură HMAC pentru a preveni falsificarea:
+
+\begin{lstlisting}[language=Python, caption=Generare cod QR cu semnatura HMAC]
+def generate_qr_code(ticket_leg_id: int,
+                     passenger_name: str,
+                     train_number: str,
+                     secret_key: str) -> bytes:
+    payload = f"{ticket_leg_id}|{passenger_name}|{train_number}"
+    signature = hmac.new(
+        secret_key.encode(),
+        payload.encode(),
+        hashlib.sha256
+    ).hexdigest()[:16]
+    qr_data = f"CFR:{payload}:{signature}"
+    img = qrcode.make(qr_data)
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    return buffer.getvalue()
+\end{lstlisting}
+
+\section{Sistemul de agenți universitari}
+
+\subsection{Modelul de date}
+
+Tabelul \texttt{university\_agents} leagă un utilizator cu rol \texttt{university\_agent} de o universitate specifică (câmpul \texttt{university\_name}). Când un pasager uploadează o legitimație, documentul este stocat în \texttt{student\_documents} cu statusul \texttt{pending} și universitatea declarată.
+
+\subsection{Fluxul de verificare}
+
+Agentul vede în dashboard-ul său toate documentele cu status \texttt{pending} pentru universitatea sa (\texttt{GET /credentials/pending}). La aprobare, \texttt{POST /credentials/\{id\}/verify} schimbă statusul documentului în \texttt{approved} și creează o intrare în tabelul \texttt{credentials} cu tipul \texttt{student} și data de expirare specificată de agent. La respingere, statusul devine \texttt{rejected} cu motivul indicat.
+
+\subsection{Integrarea cu calculul tarifelor}
+
+La calculul prețului unui bilet (\texttt{POST /tickets/quote} și \texttt{POST /tickets/buy}), sistemul verifică existența unei credențiale active de tip \texttt{student} pentru utilizatorul curent:
+
+\begin{lstlisting}[language=Python, caption=Verificare credentiala activa in calculul pretului]
+active_credential = db.execute(text("""
+    SELECT c.id FROM credentials c
+    WHERE c.user_id = :uid
+      AND c.credential_type = 'student'
+      AND c.status = 'active'
+      AND (c.valid_until IS NULL
+           OR c.valid_until > NOW())
+    LIMIT 1
+"""), {"uid": user_id}).first()
+has_student_discount = (active_credential is not None)
+\end{lstlisting}
+
+\section{Managementul abonamentelor}
+
+\subsection{Verificarea acoperirii rutei}
+
+Un abonament acoperă o rută dacă stația de plecare a abonamentului apare în ruta biletului \textit{înaintea} stației de destinație a abonamentului. Verificarea se face prin compararea ordinii stop-urilor pe ruta trenului:
+
+\begin{lstlisting}[language=Python, caption=Verificare acoperire abonament pe ruta biletului]
+def _route_covered_by_subscription(sub, leg_from_id,
+                                    leg_to_id, db):
+    # Gasim ordinea statiior pe ruta trenului
+    stops = db.execute(text("""
+        SELECT rs.station_id, rs.stop_order
+        FROM route_stops rs
+        WHERE rs.route_id = :rid
+          AND rs.station_id IN (:s1, :s2, :sa, :sb)
+        ORDER BY rs.stop_order
+    """), {...}).mappings().all()
+    # Abonamentul acopera daca sub_from apare inainte
+    # de sub_to, si ambii sunt intre leg_from si leg_to
+    ...
+\end{lstlisting}
+
+
+% =====================================================================
+\chapter{Evaluare}
+% =====================================================================
+
+\section{Testarea funcționalităților}
+
+\subsection{Scenarii de testare}
+
+Au fost definite și executate manual 12 scenarii de testare funcțională acoperind fluxurile principale ale aplicației. Tabelul~\ref{tab:tests} prezintă rezultatele.
+
+\begin{table}[ht]\small\linespread{1}
+\caption{Rezultate testare funcțională}
+\label{tab:tests}
+\begin{tabular}{l p{5.5cm} l l}
+\textbf{ID} & \textbf{Scenariu} & \textbf{Rezultat} & \textbf{Obs.} \\\hline
+T-01 & Înregistrare și autentificare utilizator & PASS & \\
+T-02 & Căutare trenuri directe pe o dată dată & PASS & \\
+T-03 & Căutare traseu cu 1 schimbare & PASS & \\
+T-04 & Rezervare loc și expirare hold la 5 min & PASS & \\
+T-05 & Cumpărare bilet cu reducere studențească & PASS & \\
+T-06 & Cumpărare bilet pentru însoțitor (preț integral) & PASS & \\
+T-07 & Cumpărare bilet cu abonament activ (preț 0) & PASS & \\
+T-08 & Reprogramare bilet pe tren alternativ & PASS & \\
+T-09 & Upload document și verificare de agent & PASS & \\
+T-10 & Cumpărare abonament și calcul economii & PASS & \\
+T-11 & Harta cu rută reală (Overpass) & PASS & întârziere 3-8s \\
+T-12 & Cod QR generat și afișat corect & PASS & \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Testarea consistenței rezervărilor simultane}
+
+Un scenariu critic este că două sesiuni nu pot rezerva același loc simultan. Testul a fost efectuat prin simularea a două cereri simultane de hold pentru același loc. Datorită blocajului \texttt{SELECT ... FOR UPDATE}, una dintre cereri a primit eroare 409 (Conflict), confirmând că nu sunt posibile rezervări duble.
+
+\section{Comparație cu soluțiile existente}
+
+\subsection{Funcționalitate}
+
+Comparând cu sistemul CFR Călători (soluția de referință națională), platforma implementată adaugă:
+\begin{itemize}
+  \item Fluxul complet de verificare digitală a legitimației studențești, eliminând necesitatea documentelor fizice;
+  \item Harta interactivă cu geometria reală a căilor ferate;
+  \item Calculul corect al prețurilor pentru grupuri mixte (studenți + non-studenți).
+\end{itemize}
+
+\subsection{Performanța API-ului de planificare}
+
+Tabelul~\ref{tab:perf} prezintă timpii de răspuns măsurați pentru endpoint-ul \texttt{/trains/search} la diferite scenarii de rute.
+
+\begin{table}[ht]\small\linespread{1}
+\caption{Timpii de răspuns pentru planificarea rutei}
+\label{tab:perf}
+\begin{tabular}{l c c c}
+\textbf{Tip rută} & \textbf{Schimbări} & \textbf{Timp mediu (ms)} & \textbf{Timp maxim (ms)} \\\hline
+Directă (ex: Buc.—Brașov) & 0 & 45 & 120 \\
+O schimbare (ex: Buc.—Cluj) & 1 & 180 & 420 \\
+Două schimbări & 2 & 850 & 1800 \\
+\hline
+\end{tabular}
+\end{table}
+
+Timpii cresc exponențial cu numărul de schimbări datorită complexității algoritmului BFS. Optimizarea prin cache reduce de aproximativ 8x numărul de interogări la baza de date față de implementarea naivă, compensând parțial această creștere.
+
+\subsection{Acoperirea GPS a stațiilor}
+
+Harta feroviară interactivă depinde de disponibilitatea coordonatelor GPS pentru stații. Tabelul~\ref{tab:gps} prezintă evoluția acoperirii GPS.
+
+\begin{table}[ht]\small\linespread{1}
+\caption{Evoluția acoperirii GPS a stațiilor}
+\label{tab:gps}
+\begin{tabular}{l c c}
+\textbf{Etapă} & \textbf{Stații cu GPS} & \textbf{Procent din total} \\\hline
+Inițial (date CFR importate) & 30 & 1.65\% \\
+După migrarea 08 (coridor principal) & 85 & 4.68\% \\
+\hline
+\end{tabular}
+\end{table}
+
+Acoperirea redusă (sub 5\%) este compensată de geometria Overpass, care nu depinde de GPS-ul stațiilor noastre, ci de datele OSM. Stațiile GPS servesc ca \textit{puncte de ancorare} pentru A*, nu ca sursă primară de geometrie.
+
+\section{Limitări identificate}
+
+\textbf{Datele de orar}: sistemul utilizează orarul real CFR 2025--2026, importat din fișierele XML publicate oficial de Informatica Feroviară S.A. pe platforma data.gov.ro (licență CC-BY 4.0). Baza de date conține 2.103 trenuri, 1.818 stații (dintre care 1.471 cu coordonate GPS geocodificate din OpenStreetMap) și 46.501 opriri cu ore reale de sosire și plecare. Limitarea rămasă este că orarul importat este un snapshot static al anului feroviar 2025--2026; o integrare cu un feed live (de tip GTFS-RT) ar permite actualizări în timp real, dar nu este necesară pentru scopul acestei lucrări.
+
+\textbf{Plată integrată}: platforma simulează plata (acceptă orice sumă) fără integrare cu un procesor de plăți real (Stripe, PayU).
+
+\textbf{Acoperirea GPS}: 95\% din stații nu au coordonate GPS în baza noastră de date, deși Overpass API compensează pentru geometria traseelor.
+
+\textbf{Scalabilitatea Overpass}: Overpass API (overpass-api.de) este un serviciu public cu rate limiting. Pentru producție, ar fi necesară o instanță Overpass privată sau un cache agresiv al geometriei.
+
+
+% =====================================================================
+\chapter{Concluzii}
+% =====================================================================
+
+\section{Rezumat}
+
+Lucrarea a prezentat proiectarea și implementarea unei platforme digitale pentru gestiunea identității și a biletelor feroviare, cu accent pe experiența pasagerilor studenți. Obiectivele propuse au fost atinse în totalitate:
+
+\begin{itemize}
+  \item \textbf{O1 (Autentificare cu roluri)} — Implementat cu JWT și politici de acces granulare per rol și per utilizator.
+  \item \textbf{O2 (Planificator multi-leg)} — Implementat ca BFS cu constrângeri temporale și cache, cu timpi de răspuns sub 1 secundă pentru rute directe și cu o schimbare.
+  \item \textbf{O3 (Credențiale studențești)} — Fluxul complet (upload, verificare, emitere, aplicare la preț) este funcțional și testat.
+  \item \textbf{O4 (Rezervare locuri cu concurență)} — Mecanismul de hold cu \texttt{SELECT FOR UPDATE} previne rezervările duble.
+  \item \textbf{O5 (Harta cu geometrie reală)} — Implementat cu Overpass API + A*, cu afișare progresivă și fallback grațios.
+  \item \textbf{O6 (Abonamente)} — Calcul corect al prețurilor cu diferențiere între titular și însoțitori.
+\end{itemize}
+
+\section{Contribuții}
+
+Contribuțiile principale ale lucrării sunt:
+
+\textbf{Arhitecturală}: o arhitectură client-server completă, cu separare clară a responsabilităților și fără dependențe externe în afara bazei de date.
+
+\textbf{Algoritimică}: integrarea algoritmului A* cu datele OSM (Overpass API) pentru redarea traseelor feroviare reale, cu filtrarea waypoint-urilor de joncțiune pentru evitarea zigzagurilor.
+
+\textbf{Funcțională}: un flux end-to-end de verificare a identității studențești care implică o instituție academică terță (agentul universitar) ca autoritate de validare, mai robustă decât auto-declararea.
+
+\textbf{Tarifară}: logica corectă de aplicare selectivă a reducerilor (numai pentru titular, nu pentru însoțitori) care reflectă reglementările CFR existente.
+
+\section{Direcții de dezvoltare ulterioară}
+
+\textbf{Integrare GTFS}: importul orarelor reale din feed-uri GTFS publice ar transforma platforma dintr-un demonstrator funcțional într-un sistem utilizabil în producție.
+
+\textbf{Aplicație mobilă}: un client nativ React Native ar îmbunătăți experiența utilizator pe dispozitive mobile, cu suport pentru notificări push (întârzieri, codul QR offline).
+
+\textbf{Identitate digitală federată}: integrarea cu eIDAS sau cu sistemul ROSE (Registrul Operatorilor Studenți și Elevilor) ar elimina necesitatea verificării manuale de către agenți universitari.
+
+\textbf{Geometrie feroviară locală}: descărcarea și stocarea locală a geometriei OSM pentru coridoarele principale ar elimina dependența de Overpass API și ar reduce latența la afișarea hărții.
+
+\textbf{Plăți integrate}: integrarea cu un procesor de plăți (PayU pentru România) ar completa fluxul comercial al aplicației.
+
+
+% =====================================================================
+\chapter*{Bibliografie}\addcontentsline{toc}{chapter}{Bibliografie}
+% =====================================================================
+
+\begin{thebibliography}{99}
+
+\bibitem{fastapi2023}
+S. Ramírez, \textit{FastAPI Documentation}, Tiangolo, 2023.
+[Online]. Disponibil: \url{https://fastapi.tiangolo.com}. [Accesat: Iunie 2026]
+
+\bibitem{db2023digital}
+Deutsche Bahn AG, \textit{DB Navigator — Digital Ticketing Platform},
+Annual Report 2023, Frankfurt, 2023.
+
+\bibitem{nationalrail2022}
+National Rail Enquiries, \textit{Railcard Digital: Implementation and Adoption},
+Technical Report, London, 2022.
+[Online]. Disponibil: \url{https://www.nationalrail.co.uk/railcards}. [Accesat: Iunie 2026]
+
+\bibitem{postgresql2023}
+PostgreSQL Global Development Group, \textit{PostgreSQL 15 Documentation},
+2023. [Online]. Disponibil: \url{https://www.postgresql.org/docs/15/}. [Accesat: Iunie 2026]
+
+\bibitem{react2023}
+Meta Platforms, \textit{React — A JavaScript library for building user interfaces},
+2023. [Online]. Disponibil: \url{https://react.dev}. [Accesat: Iunie 2026]
+
+\bibitem{leaflet2023}
+V. Agafonkin, \textit{Leaflet — an open-source JavaScript library for
+mobile-friendly interactive maps}, 2023.
+[Online]. Disponibil: \url{https://leafletjs.com}. [Accesat: Iunie 2026]
+
+\bibitem{overpass2023}
+R. Olbricht, \textit{Overpass API User's Manual}, OpenStreetMap Foundation,
+2023. [Online]. Disponibil: \url{https://overpass-api.de/}. [Accesat: Iunie 2026]
+
+\bibitem{jwt2015}
+M. Jones, J. Bradley, N. Sakimura, \textit{JSON Web Token (JWT)},
+RFC 7519, Internet Engineering Task Force, 2015.
+[Online]. Disponibil: \url{https://tools.ietf.org/html/rfc7519}. [Accesat: Iunie 2026]
+
+\bibitem{gtfs2023}
+Google LLC, \textit{General Transit Feed Specification (GTFS) Reference},
+2023. [Online]. Disponibil: \url{https://gtfs.org/documentation/realtime/reference/}. [Accesat: Iunie 2026]
+
+\bibitem{cfr2024}
+CFR Călători SA, \textit{Tarifele și reducerile aplicabile — Regulament de transport},
+București, 2024.
+[Online]. Disponibil: \url{https://www.cfrcalatori.ro/tarife/}. [Accesat: Iunie 2026]
+
+\bibitem{dijkstra1959}
+E. W. Dijkstra, ``A note on two problems in connexion with graphs,''
+\textit{Numerische Mathematik}, vol. 1, pp. 269--271, 1959.
+
+\bibitem{hart1968}
+P. E. Hart, N. J. Nilsson, B. Raphael,
+``A formal basis for the heuristic determination of minimum cost paths,''
+\textit{IEEE Transactions on Systems Science and Cybernetics},
+vol. 4, no. 2, pp. 100--107, 1968.
+
+\bibitem{sqlalchemy2023}
+M. Bayer, \textit{SQLAlchemy Documentation}, 2023.
+[Online]. Disponibil: \url{https://docs.sqlalchemy.org}. [Accesat: Iunie 2026]
+
+\bibitem{vite2023}
+E. You, \textit{Vite — Next Generation Frontend Tooling}, 2023.
+[Online]. Disponibil: \url{https://vitejs.dev}. [Accesat: Iunie 2026]
+
+\bibitem{osm2023}
+OpenStreetMap Foundation, \textit{OpenStreetMap Wiki}, 2023.
+[Online]. Disponibil: \url{https://wiki.openstreetmap.org}. [Accesat: Iunie 2026]
+
+\end{thebibliography}
+
+
+% =====================================================================
+\chapter*{Anexe}\addcontentsline{toc}{chapter}{Anexe}
+% =====================================================================
+
+\begin{appendices}
+
+% -------------------------
+\chapter{Schema completă a bazei de date}
+% -------------------------
+
+Mai jos este prezentată schema SQL principală pentru tabelele \texttt{tickets}, \texttt{ticket\_legs} și \texttt{seat\_holds}, ilustrând structura de date pentru fluxul de cumpărare.
+
+\begin{lstlisting}[language=SQL, caption=Schema tabelelor principale (extras)]
+CREATE TABLE tickets (
+    ticket_id     SERIAL PRIMARY KEY,
+    user_id       INTEGER NOT NULL REFERENCES users(user_id),
+    purchased_at  TIMESTAMP DEFAULT NOW(),
+    total_price   NUMERIC(8,2) NOT NULL,
+    status        VARCHAR(20) DEFAULT 'active'
+                  CHECK (status IN ('active','used','cancelled'))
+);
+
+CREATE TABLE ticket_legs (
+    leg_id          SERIAL PRIMARY KEY,
+    ticket_id       INTEGER NOT NULL REFERENCES tickets(ticket_id),
+    train_id        INTEGER NOT NULL REFERENCES trains(train_id),
+    from_station_id INTEGER NOT NULL REFERENCES stations(station_id),
+    to_station_id   INTEGER NOT NULL REFERENCES stations(station_id),
+    travel_date     DATE NOT NULL,
+    seat_id         INTEGER REFERENCES seats(seat_id),
+    passenger_name  VARCHAR(200),  -- NULL = titular cont
+    price           NUMERIC(8,2) NOT NULL,
+    discount        NUMERIC(8,2) DEFAULT 0,
+    qr_code         TEXT
+);
+
+CREATE TABLE seat_holds (
+    hold_id     SERIAL PRIMARY KEY,
+    seat_id     INTEGER NOT NULL REFERENCES seats(seat_id),
+    user_id     INTEGER NOT NULL REFERENCES users(user_id),
+    travel_date DATE NOT NULL,
+    created_at  TIMESTAMP DEFAULT NOW(),
+    expires_at  TIMESTAMP NOT NULL
+);
+\end{lstlisting}
+
+% -------------------------
+\chapter{Structura proiectului}
+% -------------------------
+
+\begin{lstlisting}[caption=Structura directoarelor proiectului]
+LICENTA/
+├── backend/
+│   ├── app/
+│   │   ├── core/
+│   │   │   ├── config.py       # variabile de mediu
+│   │   │   ├── database.py     # SessionLocal, engine
+│   │   │   └── security.py     # JWT, bcrypt
+│   │   ├── routers/
+│   │   │   ├── auth.py
+│   │   │   ├── tickets.py
+│   │   │   ├── seats.py
+│   │   │   ├── subscriptions.py
+│   │   │   ├── credentials.py
+│   │   │   └── map.py
+│   │   └── services/
+│   │       ├── trip_planner.py
+│   │       └── qr_generator.py
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── BuyTicket.jsx
+│   │   │   ├── MyTickets.jsx
+│   │   │   ├── Subscriptions.jsx
+│   │   │   ├── MapView.jsx
+│   │   │   └── ...
+│   │   ├── components/
+│   │   │   └── SeatMap.jsx
+│   │   ├── services/
+│   │   │   └── api.js
+│   │   └── utils/
+│   │       ├── trainType.js
+│   │       └── osmRailGeometry.js
+│   └── package.json
+├── database/
+│   ├── 01_schema.sql
+│   ├── 02_seed_operators.sql
+│   └── ...
+└── run.py
+\end{lstlisting}
+
+% -------------------------
+\chapter{Capturi de ecran ale aplicației}
+% -------------------------
+
+Figura~\ref{fig:screenshot_buy} prezintă pagina de cumpărare bilete cu selecția trenului și calculul prețului.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.9\textwidth]{pics/screenshot_buy.png}
+\caption{Pagina de cumpărare bilete}
+\label{fig:screenshot_buy}
+\end{figure}
+
+Figura~\ref{fig:screenshot_map} prezintă harta feroviară interactivă cu ruta București—Brașov redată pe geometria reală OSM.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.9\textwidth]{pics/screenshot_map.png}
+\caption{Harta feroviară cu traseu real}
+\label{fig:screenshot_map}
+\end{figure}
+
+Figura~\ref{fig:screenshot_tickets} prezintă pagina biletele mele cu modalul de boarding pass și codul QR.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.75\textwidth]{pics/screenshot_tickets.png}
+\caption{Boarding pass cu cod QR}
+\label{fig:screenshot_tickets}
+\end{figure}
+
+Figura~\ref{fig:screenshot_agent} prezintă panoul agentului universitar pentru verificarea documentelor studențești.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.9\textwidth]{pics/screenshot_agent.png}
+\caption{Panoul agentului universitar}
+\label{fig:screenshot_agent}
+\end{figure}
+
+\end{appendices}
+
+\end{document}

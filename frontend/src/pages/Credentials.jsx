@@ -6,7 +6,8 @@ function Credentials() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const activeCredentials = credentials.filter((c) => c.status === 'active')
+  const HIDDEN_CRED_TYPES = ['identity_verified']
+  const activeCredentials = credentials.filter((c) => c.status === 'active' && !HIDDEN_CRED_TYPES.includes(c.credential_type))
 
   useEffect(() => {
     const run = async () => {

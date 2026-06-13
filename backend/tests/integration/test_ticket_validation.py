@@ -226,15 +226,13 @@ class TestValidationsHistory:
     def test_history_returns_list_for_new_user(self, client):
         token = register_and_login(client, "newuser_hist")
         h = {"Authorization": f"Bearer {token}"}
-        r = client.get("/tickets/validations", headers=h)
-        if r.status_code == 404:
-            pytest.skip("Path /tickets/validations nu exista in API")
+        r = client.get("/validations/history", headers=h)
         assert r.status_code == 200, r.text
         data = r.json()
         assert isinstance(data, (list, dict))
 
     def test_history_requires_auth(self, client):
-        r = client.get("/tickets/validations")
+        r = client.get("/validations/history")
         assert r.status_code != 200
 
 

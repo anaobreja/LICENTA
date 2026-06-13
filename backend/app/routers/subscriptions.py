@@ -257,7 +257,7 @@ def buy_subscription(
                 "msg": f"Abonament {payload.subscription_type} cumparat, "
                        f"valabil pana pe {vu.isoformat()}. "
                        f"Pret: {final:.2f} RON" +
-                       (f" (cu reducere student 50%)" if student_status["is_match"] else "") + ".",
+                       (f" (cu reducere student 90%)" if student_status["is_match"] else "") + ".",
             },
         )
     except Exception:

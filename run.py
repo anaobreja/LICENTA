@@ -265,10 +265,16 @@ def main() -> None:
 
     web_port = env.get("RUN_WEB_PORT", "8765")
 
+    # HTTPS opțional: activeaza cu RUN_SSL=1 (necesita acceptarea certului in browser)
+    use_ssl = env.get("RUN_SSL", "0") == "1"
+
     # 4. Pornesc backend
     print("[backend] Pornesc API FastAPI pe :8000 ...", flush=True)
     backend = subprocess.Popen(
-        [str(venv_python()), "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"],
+        # --reload: uvicorn detecteaza modificari ale fisierelor .py si reincarca
+        # codul automat. Util in dezvoltare ca sa nu trebuiasca sa restartezi
+        # manual procesul dupa fiecare edit. In productie ar fi mai bine fara.
+        [str(venv_python()), "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000", "--reload"],
         cwd=ROOT / "backend",
         env=env,
     )
@@ -320,17 +326,18 @@ def main() -> None:
     print("[backend] OK — API ready.", flush=True)
 
     # 5. Pornesc proxy + frontend static
-    print(f"[web] Pornesc serverul web (UI + proxy /api) pe :{web_port} ...", flush=True)
-    proxy = subprocess.Popen(
-        [
-            str(venv_python()),
-            str(ROOT / "proxy_server.py"),
-            "--host", "0.0.0.0",
-            "--port", web_port,
-        ],
-        cwd=ROOT,
-        env=env,
-    )
+    scheme = "https" if use_ssl else "http"
+    ssl_label = " (HTTPS)" if use_ssl else ""
+    print(f"[web] Pornesc serverul web{ssl_label} (UI + proxy /api) pe :{web_port} ...", flush=True)
+    proxy_cmd = [
+        str(venv_python()),
+        str(ROOT / "proxy_server.py"),
+        "--host", "0.0.0.0",
+        "--port", web_port,
+    ]
+    if use_ssl:
+        proxy_cmd.append("--ssl")
+    proxy = subprocess.Popen(proxy_cmd, cwd=ROOT, env=env)
     children.append(proxy)
 
     time.sleep(1.5)
@@ -338,10 +345,25 @@ def main() -> None:
         stop_all()
         raise SystemExit("Serverul web nu a pornit.")
 
-    url = f"http://127.0.0.1:{web_port}"
+    url = f"{scheme}://127.0.0.1:{web_port}"
+    # Detectam IP-ul local pentru afisarea URL-ului de acces de pe telefon
+    try:
+        import socket as _socket
+        local_ip = next(
+            (info[4][0] for info in _socket.getaddrinfo(_socket.gethostname(), None, _socket.AF_INET)
+             if not info[4][0].startswith("127.")),
+            None,
+        )
+    except Exception:
+        local_ip = None
+
     print()
     print("=" * 60)
     print(f"  Aplicatia ruleaza la: {url}")
+    if local_ip:
+        print(f"  Acces telefon (retea locala): {scheme}://{local_ip}:{web_port}")
+        if use_ssl:
+            print(f"  (prima deschidere: accepta avertismentul de certificat in browser)")
     print()
     print("  Conturi demo (parola: demo2026):")
     print("    user.demo@railwaydemo.com       (pasager student)")

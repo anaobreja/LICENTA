@@ -184,10 +184,20 @@ def import_to_db(all_data: dict[str, dict], reset: bool = False):
 
     if reset:
         print("Reset: stergem datele de transport existente (pastram users/universities/issuers)...")
+        # IMPORTANT: NU stergem stations — coordonatele GPS geocodate anterior trebuie
+        # pastrate intre import-uri. FK-urile catre stations sunt ON DELETE RESTRICT,
+        # deci truncate-ul de mai jos NU poate cascade catre stations.
+        # Daca totusi vrei sa fortezi resetul total, foloseste --reset-stations (separat).
         cur.execute("TRUNCATE TABLE qr_tokens, validations, travel_entitlements, tickets, subscriptions RESTART IDENTITY CASCADE")
         cur.execute("TRUNCATE TABLE route_stops, routes, trains RESTART IDENTITY CASCADE")
-        cur.execute("DELETE FROM stations WHERE code LIKE 'CFR-%'")
         cur.execute("DELETE FROM railway_operators WHERE code IN ('CFR-C','REG-C','TFC','IRC','ATC','SOF','FER')")
+        # Sanity check post-reset: confirma ca stations au ramas cu coordonate
+        cur.execute(
+            "SELECT COUNT(*) AS total, COUNT(latitude) AS cu_gps FROM stations WHERE code LIKE 'CFR-%'"
+        )
+        row = cur.fetchone()
+        if row and row[0] > 0:
+            print(f"  Stations pastrate: {row[0]} total, {row[1]} cu coordonate GPS")
         conn.commit()
         print("Reset done.")
 
@@ -221,13 +231,19 @@ def import_to_db(all_data: dict[str, dict], reset: bool = False):
                 global_stations[code] = name
 
     # Insert in batch
+    # IMPORTANT: la ON CONFLICT actualizam DOAR `name` (sursa de adevar = XML CFR).
+    # NU atingem latitude/longitude/is_university_hub/student_count/universities_count
+    # pentru ca acelea sunt populate de scripturi separate (geocoding OSM, dataset
+    # universitati) si trebuie PASTRATE intre reimport-uri.
     station_id_by_xml_code = {}
     rows = [(name, f"CFR-{code}", _extract_city(name)) for code, name in global_stations.items()]
     cur.executemany(
         """
         INSERT INTO stations (name, code, city, country, is_active)
         VALUES (%s, %s, %s, 'Romania', TRUE)
-        ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+        ON CONFLICT (code) DO UPDATE
+          SET name = EXCLUDED.name
+          -- coordonatele GPS si metadatele universitate raman neatinse
         RETURNING station_id
         """,
         rows,
@@ -315,15 +331,27 @@ def import_to_db(all_data: dict[str, dict], reset: bool = False):
             # Insert toate statiile pe ruta (origine + destinatii din elemente)
             cum_km = 0.0
             stops_to_insert = []
-            # Adaug originea ca primul stop
+            # TipOprire se afla pe elementul care PLEACA din statie (CodStaOrigine),
+            # deci stops[i]["tip_oprire"] = starea statiei de plecare a segmentului i.
+            # Valorile non-comerciale: 'N' (trecere), 'T' (tehnica).
+            # Doar 'C' explicit = oprire comerciala; gol/lipsa = tehnic/trecere.
+            def _is_commercial(tip: str) -> bool:
+                return tip == "C"
+
+            # Adaug originea ca primul stop.
+            # TipOprire de pe Secventa=1 (stops[0]) descrie starea statiei de PLECARE
+            # (origine): 'C' = oprire comerciala reala, 'N' = doar punct de start tehnic
+            # (depou, triaj, ramificatie). Daca XML zice 'N', respectam — nu fortam True.
+            origin_commercial = _is_commercial(stops[0]["tip_oprire"])
             stops_to_insert.append({
                 "station_id": origin_id,
                 "stop_order": 1,
                 "distance_from_origin_km": 0.0,
                 "arrival_time": None,
                 "departure_time": stops[0]["ora_p"],
+                "is_commercial_stop": origin_commercial,
             })
-            # Apoi pentru fiecare element, statia de destinatie devine urmatorul stop
+            # Fiecare destinatie primeste TipOprire din elementul urmator (cel care pleaca din ea)
             for i, el in enumerate(stops):
                 cum_km += el["km_segment"]
                 arr_id = station_id_by_xml_code.get(el["arr_code"])
@@ -332,23 +360,29 @@ def import_to_db(all_data: dict[str, dict], reset: bool = False):
                 next_dep = None
                 if i + 1 < len(stops):
                     next_dep = stops[i + 1]["ora_p"]
+                # TipOprire pentru statie = stops[i+1] (elementul ce pleaca din ea)
+                # Ultima statie (destinatie finala) este intotdeauna comerciala
+                commercial = _is_commercial(stops[i + 1]["tip_oprire"]) if i + 1 < len(stops) else True
                 stops_to_insert.append({
                     "station_id": arr_id,
                     "stop_order": i + 2,
                     "distance_from_origin_km": round(cum_km, 2),
                     "arrival_time": el["ora_s"],
                     "departure_time": next_dep,
+                    "is_commercial_stop": commercial,
                 })
 
             try:
                 cur.executemany(
                     """
                     INSERT INTO route_stops (route_id, station_id, stop_order,
-                                             distance_from_origin_km, arrival_time, departure_time)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                                             distance_from_origin_km, arrival_time, departure_time,
+                                             is_commercial_stop)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
                     [(route_id, s["station_id"], s["stop_order"],
-                      s["distance_from_origin_km"], s["arrival_time"], s["departure_time"])
+                      s["distance_from_origin_km"], s["arrival_time"], s["departure_time"],
+                      s["is_commercial_stop"])
                      for s in stops_to_insert],
                 )
                 total_stops += len(stops_to_insert)
@@ -367,11 +401,13 @@ def import_to_db(all_data: dict[str, dict], reset: bool = False):
                 cur.executemany(
                     """
                     INSERT INTO route_stops (route_id, station_id, stop_order,
-                                             distance_from_origin_km, arrival_time, departure_time)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                                             distance_from_origin_km, arrival_time, departure_time,
+                                             is_commercial_stop)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
                     [(route_id, s["station_id"], s["stop_order"],
-                      s["distance_from_origin_km"], s["arrival_time"], s["departure_time"])
+                      s["distance_from_origin_km"], s["arrival_time"], s["departure_time"],
+                      s["is_commercial_stop"])
                      for s in dedup],
                 )
                 total_stops += len(dedup)

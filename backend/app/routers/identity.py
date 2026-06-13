@@ -28,6 +28,20 @@ from app.core.roles import (
 router = APIRouter(tags=["identity"])
 
 
+
+def _normalize_uni_name(name: str | None) -> str:
+    """Normalizeaza nume universitate pentru comparatie diacritic+case insensitive."""
+    if not name:
+        return ""
+    s = name.lower().strip()
+    # Mapping diacritice -> ASCII
+    for old, new in {
+        "ă": "a", "â": "a", "î": "i", "ș": "s", "ş": "s", "ț": "t", "ţ": "t",
+    }.items():
+        s = s.replace(old, new)
+    return s
+
+
 def _academic_year_end() -> datetime:
     """Returnează 30 septembrie al sfârșitului anului universitar curent.
     An universitar: 1 oct → 30 sep.
@@ -339,7 +353,8 @@ def _issue_card_if_missing(db: Session, user_id: int):
             "valid_until": _academic_year_end(),
         },
     )
-    db.commit()
+    # NOTA: nu facem db.commit() aici. Caller-ul (approve flow) commit-uieste
+    # toata tranzactia o singura data, pentru consistenta atomicitate.
 
 
 def _credential_type_from_document(document_type: str) -> str:
@@ -468,6 +483,7 @@ def _insert_source_document(
     ci_date_of_birth: str | None = None,
     ci_sex: str | None = None,
     ci_address: str | None = None,
+    home_station_id: int | None = None,
 ):
     row = db.execute(
         text(
@@ -475,14 +491,16 @@ def _insert_source_document(
             INSERT INTO source_documents
                 (user_id, document_type, document_number_masked, document_image_path,
                  document_image_path_verso, status, university_name, year_of_study,
-                 ci_number, ci_name, ci_date_of_birth, ci_sex, ci_address)
+                 ci_number, ci_name, ci_date_of_birth, ci_sex, ci_address,
+                 home_station_id)
             VALUES
                 (:user_id, :document_type, :document_number_masked, :document_image_path,
                  :document_image_path_verso, 'pending', :university_name, :year_of_study,
-                 :ci_number, :ci_name, :ci_date_of_birth, :ci_sex, :ci_address)
+                 :ci_number, :ci_name, :ci_date_of_birth, :ci_sex, :ci_address,
+                 :home_station_id)
             RETURNING id, user_id, document_type, document_number_masked, document_image_path,
                       document_image_path_verso, status, uploaded_at, university_name, year_of_study,
-                      ci_number, ci_name, ci_date_of_birth, ci_sex, ci_address
+                      ci_number, ci_name, ci_date_of_birth, ci_sex, ci_address, home_station_id
             """
         ),
         {
@@ -498,6 +516,7 @@ def _insert_source_document(
             "ci_date_of_birth": ci_date_of_birth or None,
             "ci_sex": ci_sex or None,
             "ci_address": ci_address or None,
+            "home_station_id": home_station_id,
         },
     ).mappings().first()
     return dict(row)
@@ -728,6 +747,7 @@ def submit_identity_validation_request(
     ci_date_of_birth: str = Form(default=""),
     ci_sex: str = Form(default=""),
     ci_address: str = Form(default=""),
+    home_station_id: str = Form(default=""),
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
@@ -748,6 +768,25 @@ def submit_identity_validation_request(
                 status_code=400,
                 detail=f"Nu poți beneficia de reducerea studențească — vârsta ({age} ani) depășește limita de 30 de ani prevăzută de CFR.",
             )
+
+    # Validare gara de provenienta (obligatorie pentru student_card)
+    parsed_home_station_id = None
+    if home_station_id and home_station_id.strip():
+        try:
+            parsed_home_station_id = int(home_station_id.strip())
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="home_station_id invalid")
+        exists = db.execute(
+            text("SELECT 1 FROM stations WHERE station_id = :sid"),
+            {"sid": parsed_home_station_id},
+        ).first()
+        if not exists:
+            raise HTTPException(status_code=400, detail="Gara de provenienta selectata nu exista")
+    elif legitimation_type == "student_card":
+        raise HTTPException(
+            status_code=400,
+            detail="Selecteaza gara ta de provenienta (necesara pentru ruta personala student).",
+        )
 
     # Cerere pending existentă (modificare)
     pending_docs = db.execute(
@@ -877,6 +916,7 @@ def submit_identity_validation_request(
         ci_date_of_birth=ci_date_of_birth.strip() or None,
         ci_sex=ci_sex.strip() or None,
         ci_address=ci_address.strip() or None,
+        home_station_id=parsed_home_station_id,
     )
 
     db.commit()
@@ -907,13 +947,23 @@ def get_document_photo(
 ):
     current = _current_user(authorization, db)
 
+    # Bug #40: folosim sd.university_name (numele declarat pe document),
+    # nu users.university_name. users.university_name e adesea NULL/'' chiar
+    # daca user-ul a depus cerere pentru o universitate specifica - asta ar
+    # face match-ul cu agentul mereu False sau (cu normalizare) TRUE pentru
+    # oricine. Sursa de adevar pentru "carei universitati apartine documentul"
+    # este coloana din source_documents. Suplimentar, daca agentul are
+    # university_id setat (mai sigur ca string-name), preferam JOIN pe ID.
     row = db.execute(
         text(
             """
-            SELECT sd.id, sd.user_id, sd.document_image_path, sd.document_image_path_verso,
-                   u.university_name AS owner_university
+            SELECT sd.id, sd.user_id,
+                   sd.document_image_path, sd.document_image_path_verso,
+                   sd.university_name AS doc_university,
+                   un.name AS owner_university_canonical
             FROM source_documents sd
-            JOIN users u ON u.user_id = sd.user_id
+            LEFT JOIN universities un
+                   ON unaccent(LOWER(un.name)) = unaccent(LOWER(sd.university_name))
             WHERE sd.id = :document_id
             """
         ),
@@ -923,14 +973,45 @@ def get_document_photo(
     if not row:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # AUTHORIZATION FIX: only owner and same-university agents can access
-    agent_university = current.get("university_name")
-    can_access = (
-        current["user_id"] == row["user_id"]  # Owner can access own documents
-        or (has_role(current.get("role"), ROLE_UNIVERSITY_AGENT) and 
-            agent_university == row["owner_university"])  # Agent only from same university
-    )
-    if not can_access:
+    # AUTHORIZATION: only owner and same-university agents can access.
+    # Bug #39 + #40: pentru agent, preferam match pe university_id (FK sigur),
+    # cu fallback pe nume normalizat (diacritic+case insensitive).
+    is_owner = (current["user_id"] == row["user_id"])
+    is_authorized_agent = False
+    if has_role(current.get("role"), ROLE_UNIVERSITY_AGENT):
+        # Aducem university_id si university_name ale agentului fresh din DB
+        agent_row = db.execute(
+            text(
+                "SELECT university_id, university_name FROM users WHERE user_id = :uid"
+            ),
+            {"uid": current["user_id"]},
+        ).first()
+        if agent_row:
+            agent_univ_id = agent_row[0]
+            agent_univ_name = agent_row[1]
+            # Preferred path: comparam id-ul universitatii agentului cu id-ul
+            # universitatii documentului (rezolvat prin unaccent join).
+            if agent_univ_id is not None:
+                doc_univ_id = db.execute(
+                    text(
+                        """
+                        SELECT university_id FROM universities
+                        WHERE unaccent(LOWER(name)) = unaccent(LOWER(:n))
+                        LIMIT 1
+                        """
+                    ),
+                    {"n": row["doc_university"] or ""},
+                ).scalar()
+                if doc_univ_id == agent_univ_id:
+                    is_authorized_agent = True
+            # Fallback: compare normalizat pe nume (cand agentul nu are uni_id)
+            if not is_authorized_agent and agent_univ_name:
+                if _normalize_uni_name(agent_univ_name) == _normalize_uni_name(
+                    row["doc_university"]
+                ):
+                    is_authorized_agent = True
+
+    if not (is_owner or is_authorized_agent):
         raise HTTPException(status_code=403, detail="Access denied")
 
     side_norm = (side or "front").strip().lower()
@@ -960,14 +1041,20 @@ def list_my_documents(
     rows = db.execute(
         text(
             """
-            SELECT id, document_type, document_number_masked, document_image_path,
-                   document_image_path_verso, status, uploaded_at, university_name, year_of_study,
-                   ci_number, ci_name, ci_date_of_birth, ci_sex, ci_address,
-                (document_image_path IS NOT NULL) AS has_front_image,
-                (document_image_path_verso IS NOT NULL) AS has_verso_image
-            FROM source_documents
-            WHERE user_id = :user_id
-            ORDER BY uploaded_at DESC
+            SELECT sd.id, sd.document_type, sd.document_number_masked,
+                   sd.document_image_path, sd.document_image_path_verso,
+                   sd.status, sd.uploaded_at, sd.university_name, sd.year_of_study,
+                   sd.ci_number, sd.ci_name, sd.ci_date_of_birth, sd.ci_sex, sd.ci_address,
+                   sd.home_station_id,
+                   hs.name AS home_station_name,
+                   hs.city AS home_station_city,
+                   hs.code AS home_station_code,
+                (sd.document_image_path IS NOT NULL) AS has_front_image,
+                (sd.document_image_path_verso IS NOT NULL) AS has_verso_image
+            FROM source_documents sd
+            LEFT JOIN stations hs ON hs.station_id = sd.home_station_id
+            WHERE sd.user_id = :user_id
+            ORDER BY sd.uploaded_at DESC
             """
         ),
         {"user_id": current["user_id"]},
@@ -1015,7 +1102,8 @@ def list_my_notifications(
     db: Session = Depends(get_db),
 ):
     current = _current_user(authorization, db)
-    _require_role(current, ROLE_PASSENGER)
+    if not has_role(current.get("role"), ROLE_PASSENGER):
+        return []
 
     rows = db.execute(
         text(
@@ -1314,14 +1402,20 @@ def issuer_pending_documents(
                d.document_type, d.document_number_masked, d.document_image_path,
                d.document_image_path_verso, d.uploaded_at, d.university_name, d.year_of_study,
                d.ci_number, d.ci_name, d.ci_date_of_birth, d.ci_sex, d.ci_address,
-               u.profile_photo_path
+               u.profile_photo_path,
+               d.home_station_id,
+               hs.name AS home_station_name,
+               hs.city AS home_station_city,
+               hs.code AS home_station_code
         FROM source_documents d
         JOIN users u ON u.user_id = d.user_id
+        LEFT JOIN stations hs ON hs.station_id = d.home_station_id
         WHERE d.status = 'pending'
     """
     params: dict = {}
     if agent_university_id:
-        query += " AND d.university_name = (SELECT name FROM universities WHERE university_id = :univ_id)"
+        # Match tolerant la diacritice: frontend trimite "Bucuresti" sau "București"
+        query += " AND unaccent(LOWER(d.university_name)) = unaccent(LOWER((SELECT name FROM universities WHERE university_id = :univ_id)))"
         params["univ_id"] = agent_university_id
     if year_of_study is not None:
         query += " AND d.year_of_study = :year_of_study"
@@ -1362,7 +1456,7 @@ def university_stats(
             {"uid": current["user_id"]},
         ).first()
         if row:
-            univ_filter = " AND d.university_name = :univ_name"
+            univ_filter = " AND unaccent(LOWER(d.university_name)) = unaccent(LOWER(:univ_name))"
             params["univ_name"] = row[1]
 
     # Totale per status
@@ -1455,7 +1549,7 @@ def issuer_approve_document(
         raise HTTPException(status_code=403, detail="Acces interzis")
 
     doc = db.execute(
-        text("SELECT id, user_id, document_type, status, university_name FROM source_documents WHERE id = :id"),
+        text("SELECT id, user_id, document_type, status, university_name, home_station_id FROM source_documents WHERE id = :id"),
         {"id": document_id},
     ).mappings().first()
 
@@ -1470,10 +1564,14 @@ def issuer_approve_document(
         text("SELECT name FROM universities WHERE university_id = (SELECT university_id FROM users WHERE user_id = :uid)"),
         {"uid": reviewer["user_id"]},
     ).first()
-    if agent_univ_row:
-        agent_univ_name = agent_univ_row[0]
-        if doc.get("university_name") != agent_univ_name:
-            raise HTTPException(status_code=403, detail="Nu poți aproba documente de la altă universitate")
+    if not agent_univ_row:
+        raise HTTPException(
+            status_code=403,
+            detail="Agentul nu are universitate asociata. Contactati administratorul.",
+        )
+    agent_univ_name = agent_univ_row[0]
+    if _normalize_uni_name(doc.get("university_name")) != _normalize_uni_name(agent_univ_name):
+        raise HTTPException(status_code=403, detail="Nu poti aproba documente de la alta universitate")
 
     credential_type = _credential_type_from_document(doc["document_type"])
     active_same_type = db.execute(
@@ -1504,6 +1602,98 @@ def issuer_approve_document(
         text("UPDATE source_documents SET status = 'approved' WHERE id = :id"),
         {"id": document_id},
     )
+
+    # Seteaza gara de provenienta pe profilul user-ului (folosita pentru
+    # detectarea rutei personale la cumparare bilete student).
+    if doc.get("home_station_id"):
+        db.execute(
+            text(
+                """
+                UPDATE users
+                SET home_station_id = :hsid, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = :uid
+                """
+            ),
+            {"hsid": doc["home_station_id"], "uid": doc["user_id"]},
+        )
+
+    # Bug #41 FIX: Seteaza university_id pe user pe baza universitatii din
+    # document. La register, lookup-ul putea esua (diacritice / camp gol).
+    # Aici avem sd.university_name garantat corect + unaccent match -> FK sigur.
+    # Asta rezolva si "Statia universitatii nu este asociata" pe profil
+    # (un.main_station_id ajunge accesibil prin JOIN cu universities).
+    if doc.get("university_name"):
+        db.execute(
+            text(
+                """
+                UPDATE users
+                SET university_id = (
+                    SELECT university_id FROM universities
+                    WHERE unaccent(LOWER(name)) = unaccent(LOWER(:n))
+                    LIMIT 1
+                ),
+                university_name = :n,
+                updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = :uid
+                  AND (university_id IS NULL OR university_name IS NULL OR university_name = '')
+                """
+            ),
+            {"n": doc["university_name"], "uid": doc["user_id"]},
+        )
+
+    # Sync data nasterii din CI in users (sursa de adevar = CI scanat).
+    # Userul nu mai trebuie sa o seteze manual in profil.
+    # ci_date_of_birth poate veni in format DD.MM.YYYY (din MRZ scan) sau YYYY-MM-DD.
+    # Normalizam la YYYY-MM-DD pentru PostgreSQL DATE column.
+    doc_full = db.execute(
+        text("SELECT ci_date_of_birth FROM source_documents WHERE id = :id"),
+        {"id": document_id},
+    ).first()
+    if doc_full and doc_full[0]:
+        raw_dob = str(doc_full[0]).strip()
+        normalized_dob = None
+        # Format DD.MM.YYYY (din MRZ post-procesat)
+        if len(raw_dob) == 10 and raw_dob[2] == "." and raw_dob[5] == ".":
+            try:
+                d, m, y = raw_dob.split(".")
+                normalized_dob = f"{int(y):04d}-{int(m):02d}-{int(d):02d}"
+            except (ValueError, IndexError):
+                normalized_dob = None
+        # Format DD/MM/YYYY (alta varianta comuna RO)
+        elif len(raw_dob) == 10 and raw_dob[2] == "/" and raw_dob[5] == "/":
+            try:
+                d, m, y = raw_dob.split("/")
+                normalized_dob = f"{int(y):04d}-{int(m):02d}-{int(d):02d}"
+            except (ValueError, IndexError):
+                normalized_dob = None
+        # Format YYYY-MM-DD (deja ISO)
+        elif len(raw_dob) == 10 and raw_dob[4] == "-" and raw_dob[7] == "-":
+            normalized_dob = raw_dob
+        # Format MRZ brut YYMMDD (6 caractere)
+        elif len(raw_dob) == 6 and raw_dob.isdigit():
+            try:
+                yy, mm, dd = raw_dob[:2], raw_dob[2:4], raw_dob[4:6]
+                # MRZ folosește pivot: 00-30 => 2000+, 31-99 => 1900+
+                year = 2000 + int(yy) if int(yy) <= 30 else 1900 + int(yy)
+                normalized_dob = f"{year:04d}-{int(mm):02d}-{int(dd):02d}"
+            except (ValueError, IndexError):
+                normalized_dob = None
+        if normalized_dob:
+            # Folosim CAST() in loc de :dob::date pentru ca SQLAlchemy
+            # interpreteaza :param::type cu :param ca prima parte si ::type ca cast.
+            # CAST() e SQL standard si nu intra in conflict cu bind params.
+            db.execute(
+                text(
+                    """
+                    UPDATE users
+                    SET date_of_birth = CAST(:dob AS date),
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = :uid
+                      AND (date_of_birth IS NULL OR date_of_birth != CAST(:dob AS date))
+                    """
+                ),
+                {"dob": normalized_dob, "uid": doc["user_id"]},
+            )
 
     db.execute(
         text(
@@ -1562,6 +1752,32 @@ def issuer_approve_document(
         },
     )
 
+    # La aprobarea unui student_card, agentul a verificat si datele de identitate
+    # (CI + home_station). Cream si credential identity_verified pentru a activa
+    # frozen check pe campurile personale (CNP, nume, data nastere, home_station_id).
+    if doc["document_type"] in ("student_card", "student_id"):
+        # Expire credentiale identity_verified anterioare
+        db.execute(
+            text("""
+                UPDATE user_credentials
+                SET status = 'expired'
+                WHERE user_id = :uid AND status = 'active'
+                  AND credential_type = 'identity_verified'
+            """),
+            {"uid": doc["user_id"]},
+        )
+        db.execute(
+            text("""
+                INSERT INTO user_credentials (user_id, credential_type, claim_value, issuer_id, status, valid_until)
+                VALUES (:user_id, 'identity_verified', 'true', :issuer_id, 'active', :valid_until)
+            """),
+            {
+                "user_id": doc["user_id"],
+                "issuer_id": credential_issuer_id,
+                "valid_until": _academic_year_end(),
+            },
+        )
+
     _issue_card_if_missing(db, doc["user_id"])
 
     doc_label = _document_type_label(doc["document_type"])
@@ -1591,7 +1807,7 @@ def issuer_reject_document(
         raise HTTPException(status_code=403, detail="Acces interzis")
 
     doc = db.execute(
-        text("SELECT id, user_id, document_type, status, university_name FROM source_documents WHERE id = :id"),
+        text("SELECT id, user_id, document_type, status, university_name, home_station_id FROM source_documents WHERE id = :id"),
         {"id": document_id},
     ).mappings().first()
 
@@ -1606,10 +1822,14 @@ def issuer_reject_document(
         text("SELECT name FROM universities WHERE university_id = (SELECT university_id FROM users WHERE user_id = :uid)"),
         {"uid": reviewer["user_id"]},
     ).first()
-    if agent_univ_row:
-        agent_univ_name = agent_univ_row[0]
-        if doc.get("university_name") != agent_univ_name:
-            raise HTTPException(status_code=403, detail="Nu poți respinge documente de la altă universitate")
+    if not agent_univ_row:
+        raise HTTPException(
+            status_code=403,
+            detail="Agentul nu are universitate asociata. Contactati administratorul.",
+        )
+    agent_univ_name = agent_univ_row[0]
+    if _normalize_uni_name(doc.get("university_name")) != _normalize_uni_name(agent_univ_name):
+        raise HTTPException(status_code=403, detail="Nu poti aproba documente de la alta universitate")
 
     db.execute(
         text("UPDATE source_documents SET status = 'rejected' WHERE id = :id"),

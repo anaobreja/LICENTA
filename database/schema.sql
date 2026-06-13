@@ -387,6 +387,7 @@ CREATE TABLE route_stops (
     distance_from_origin_km NUMERIC(8, 2),
     arrival_time TIME,
     departure_time TIME,
+    is_commercial_stop BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE(route_id, stop_order),
     FOREIGN KEY (route_id) REFERENCES routes(route_id) ON DELETE CASCADE,
     FOREIGN KEY (station_id) REFERENCES stations(station_id) ON DELETE RESTRICT
@@ -1046,6 +1047,19 @@ ALTER TABLE tickets
 
 CREATE INDEX IF NOT EXISTS idx_tickets_uses_subscription
     ON tickets(uses_subscription_id) WHERE uses_subscription_id IS NOT NULL;
+
+
+-- Nume pasager (pentru bilete cumparate in numele altcuiva).
+-- NULL = pasagerul e cumparatorul insusi (user.first_name + user.last_name).
+ALTER TABLE tickets
+    ADD COLUMN IF NOT EXISTS passenger_name VARCHAR(200);
+
+-- Gara de provenienta declarata in cererea de validare identitate.
+-- Agentul universitar o vede in dashboard si decide manual daca aproba.
+-- La aprobare, valoarea trece in users.home_station_id.
+ALTER TABLE source_documents
+    ADD COLUMN IF NOT EXISTS home_station_id INT
+        REFERENCES stations(station_id) ON DELETE SET NULL;
 
 -- ---------------------------------------------------------------------------
 -- 4. Functie utility: cleanup lazy abonamente expirate

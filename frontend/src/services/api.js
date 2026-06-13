@@ -37,7 +37,26 @@ async function apiCall(endpoint, options = {}) {
       try {
         const errorData = await response.json()
         if (errorData?.detail) {
-          errorMessage = errorData.detail
+          // Bug fix: detail poate fi string, array (Pydantic) sau obiect
+          // (custom HTTPException cu cheile error/message/etc).
+          // Nu lasam "[object Object]" sa apara in UI.
+          const d = errorData.detail
+          if (typeof d === 'string') {
+            errorMessage = d
+          } else if (Array.isArray(d)) {
+            errorMessage = d.map(e => {
+              if (typeof e === 'string') return e
+              if (e?.msg && Array.isArray(e.loc)) {
+                return `${e.loc.join('.')}: ${e.msg}`
+              }
+              return e?.msg || JSON.stringify(e)
+            }).join('; ')
+          } else if (typeof d === 'object' && d !== null) {
+            // Preferred keys for custom HTTPException dict
+            errorMessage = d.message || d.error || d.detail || JSON.stringify(d)
+          } else {
+            errorMessage = String(d)
+          }
         }
       } catch (_) {
         // Ignore JSON parse errors and keep generic message.
@@ -229,6 +248,7 @@ export const submitIdentityValidationRequest = async ({
   ci_date_of_birth = '',
   ci_sex = '',
   ci_address = '',
+  home_station_id = '',
 }) => {
   const url = `${API_BASE_URL}/documents/validation-request`
   const formData = new FormData()
@@ -250,6 +270,7 @@ export const submitIdentityValidationRequest = async ({
   formData.append('ci_date_of_birth', ci_date_of_birth)
   formData.append('ci_sex', ci_sex)
   formData.append('ci_address', ci_address || '')
+  formData.append('home_station_id', home_station_id ? String(home_station_id) : '')
 
   const response = await fetch(url, {
     method: 'POST',
@@ -580,6 +601,8 @@ export const buyTicket = ({
   arrival_station_id,
   travel_date,
   ticket_type = 'single',
+  passengers,
+  seat_ids,
 }) =>
   apiCall('/tickets/buy', {
     method: 'POST',
@@ -589,7 +612,21 @@ export const buyTicket = ({
       arrival_station_id,
       travel_date,
       ticket_type,
+      ...(passengers && passengers.length > 0 ? { passengers } : {}),
+      ...(seat_ids && seat_ids.length > 0 ? { seat_ids } : {}),
     }),
+  })
+
+export const quoteJourney = ({ legs, ticket_type = 'single' }) =>
+  apiCall('/tickets/quote-journey', {
+    method: 'POST',
+    body: JSON.stringify({ legs, ticket_type }),
+  })
+
+export const buyJourney = ({ legs, ticket_type = 'single', passengers }) =>
+  apiCall('/tickets/buy-journey', {
+    method: 'POST',
+    body: JSON.stringify({ legs, ticket_type, passengers }),
   })
 
 export const getMyTickets = () => apiCall('/tickets/my')
@@ -613,6 +650,8 @@ export const quoteTicket = ({
   arrival_station_id,
   travel_date,
   ticket_type = 'single',
+  seat_ids,
+  passengers,
 }) =>
   apiCall('/tickets/quote', {
     method: 'POST',
@@ -622,6 +661,10 @@ export const quoteTicket = ({
       arrival_station_id,
       travel_date,
       ticket_type,
+      // Backend foloseste len(seat_ids) sau len(passengers) ca n_pax.
+      // Daca sunt definite, le trimitem - altfel n_pax = 1.
+      ...(seat_ids && seat_ids.length > 0 ? { seat_ids } : {}),
+      ...(passengers && passengers.length > 0 ? { passengers } : {}),
     }),
   })
 
@@ -635,6 +678,21 @@ export const searchTrains = (fromStationId, toStationId, travelDate = null) => {
   })
   if (travelDate) qs.set('travel_date', travelDate)
   return apiCall(`/trains/search?${qs.toString()}`)
+}
+
+// Travel stats: KPIs + grafic luni + top trenuri + badge-uri
+export const getMyTravelStats = () => apiCall('/users/me/travel-stats')
+
+// Trip planner: sugestii itinerarii directe + cu schimbari (max 2)
+export const suggestTrips = (fromStationId, toStationId, travelDate, opts = {}) => {
+  const qs = new URLSearchParams({
+    from_station_id: String(fromStationId),
+    to_station_id: String(toStationId),
+    travel_date: travelDate,
+  })
+  if (opts.departureAfter) qs.set('departure_after', opts.departureAfter)
+  if (opts.topN) qs.set('top_n', String(opts.topN))
+  return apiCall(`/trips/suggest?${qs.toString()}`)
 }
 
 // Map endpoints
@@ -657,8 +715,19 @@ export const getMapConnections = ({ min_trains = 1, only_university = true, oper
 
 export const getMapOperators = () => apiCall('/map/operators')
 
+export const getRailSegments = () => apiCall('/map/rail-segments')
+
 export const simulateTrainPosition = (trainId) =>
   apiCall(`/map/train-simulate/${trainId}`)
+
+export const getRouteGeometry = ({ from_station_id, to_station_id, travel_date = null } = {}) => {
+  const qs = new URLSearchParams({
+    from_station_id: String(from_station_id),
+    to_station_id: String(to_station_id),
+  })
+  if (travel_date) qs.set('travel_date', travel_date)
+  return apiCall(`/map/route-geometry?${qs.toString()}`)
+}
 
 
 // =============================================================================

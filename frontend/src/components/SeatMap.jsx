@@ -1,3 +1,4 @@
+import { fmtTrainType } from '../utils/trainType'
 /**
  * SeatMap — vizualizare interactiva a vagoanelor + locurilor unui tren.
  *
@@ -23,6 +24,15 @@
  */
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { getTrainSeats, holdSeat, releaseSeat } from '../services/api'
+
+// helper: doua array-uri cu aceleasi id-uri (ordinea nu conteaza)
+function sameIds(a, b) {
+  if (a.length !== b.length) return false
+  const sa = [...a].sort()
+  const sb = [...b].sort()
+  for (let i = 0; i < sa.length; i++) if (sa[i] !== sb[i]) return false
+  return true
+}
 
 const STATUS_STYLES = {
   free:       'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 hover:border-emerald-400 cursor-pointer',
@@ -64,6 +74,8 @@ function CarLayout({ car, onSeatClick, disabled }) {
     rows[s.row][s.letter] = s
   }
   const sortedRows = Object.keys(rows).sort((a, b) => Number(a) - Number(b))
+  // Imbogatim seat-ul cu info vagon inainte de a-l trimite la parent
+  const handleClick = (seat) => onSeatClick({ ...seat, car_number: car.car_number, car_class: car.car_class })
 
   return (
     <div className="border-2 border-slate-300 dark:border-slate-700 rounded-2xl p-4 bg-slate-50 dark:bg-slate-800/50 inline-block">
@@ -86,11 +98,11 @@ function CarLayout({ car, onSeatClick, disabled }) {
             <div key={rowNum} className="flex items-center gap-1">
               <span className="w-5 text-xs text-slate-500 text-right">{rowNum}</span>
               {['A', 'B'].map((l) =>
-                r[l] ? <Seat key={l} seat={r[l]} onClick={onSeatClick} disabled={disabled} /> : <div key={l} className="w-9 h-9" />
+                r[l] ? <Seat key={l} seat={r[l]} onClick={handleClick} disabled={disabled} /> : <div key={l} className="w-9 h-9" />
               )}
               <div className="w-3 border-l-2 border-dashed border-slate-300 dark:border-slate-600 h-9 mx-1" />
               {['C', 'D'].map((l) =>
-                r[l] ? <Seat key={l} seat={r[l]} onClick={onSeatClick} disabled={disabled} /> : <div key={l} className="w-9 h-9" />
+                r[l] ? <Seat key={l} seat={r[l]} onClick={handleClick} disabled={disabled} /> : <div key={l} className="w-9 h-9" />
               )}
             </div>
           )
@@ -112,27 +124,37 @@ function Legend() {
   )
 }
 
-export default function SeatMap({ trainId, travelDate, onSelectionChange, maxSeats = 4 }) {
+export default function SeatMap({ trainId, travelDate, onSelectionChange, maxSeats = 4, restrictToClass = null }) {
   const [layout, setLayout] = useState(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [pendingSeatId, setPendingSeatId] = useState(null)
   const pollRef = useRef(null)
+  const lastSelectionRef = useRef([])  // memoram ultima selectie ca sa nu spamam parent-ul
 
   const loadLayout = useCallback(async () => {
     try {
       const data = await getTrainSeats(trainId, travelDate)
       setLayout(data)
       setErr('')
-      // Notifica parent de seat-urile selectate (mine_held)
+      // Notifica parent de seat-urile selectate (mine_held) DOAR daca s-au schimbat
       const mineHeld = []
       for (const car of (data.cars || [])) {
         for (const s of (car.seats || [])) {
-          if (s.status === 'mine_held') mineHeld.push(s.seat_id)
+          if (s.status === 'mine_held') mineHeld.push({
+            seat_id: s.seat_id,
+            label: s.label,
+            car_number: car.car_number,
+            car_class: car.car_class,
+          })
         }
       }
-      onSelectionChange?.(mineHeld)
+      const mineHeldIds = mineHeld.map(s => s.seat_id)
+      if (!sameIds(lastSelectionRef.current, mineHeldIds)) {
+        lastSelectionRef.current = mineHeldIds
+        onSelectionChange?.(mineHeld)
+      }
     } catch (e) {
       setErr(e.message || 'Nu am putut incarca harta locurilor')
     } finally {
@@ -149,6 +171,11 @@ export default function SeatMap({ trainId, travelDate, onSelectionChange, maxSea
 
   const handleSeatClick = async (seat) => {
     if (busy) return
+    // Verifica restrictia de clasa
+    if (restrictToClass !== null && seat.car_class !== restrictToClass) {
+      setErr(`Poti selecta doar locuri de clasa ${restrictToClass} (ca biletul original).`)
+      return
+    }
     setBusy(true)
     setPendingSeatId(seat.seat_id)
     try {
@@ -183,7 +210,10 @@ export default function SeatMap({ trainId, travelDate, onSelectionChange, maxSea
   }
   if (!layout) return null
 
-  const { summary, cars } = layout
+  const { summary } = layout
+  const cars = restrictToClass !== null
+    ? (layout.cars || []).filter(c => c.car_class === restrictToClass)
+    : (layout.cars || [])
 
   return (
     <div className="space-y-4">
@@ -191,7 +221,7 @@ export default function SeatMap({ trainId, travelDate, onSelectionChange, maxSea
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="font-bold text-sm">
-            Tren {layout.train.train_number} ({layout.train.train_type})
+            Tren {layout.train.train_number} ({fmtTrainType(layout.train.train_type)})
             {' '}— {layout.train.origin} → {layout.train.destination}
           </div>
           <div className="text-xs text-slate-500 mt-0.5">

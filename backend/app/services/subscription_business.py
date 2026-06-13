@@ -294,6 +294,28 @@ def check_subscription_overlap(
 # Helper: gasire abonament activ care acopera o ruta (folosit la buy_ticket)
 # ---------------------------------------------------------------------------
 
+def _segment_is_on_route_pair(
+    db: Session,
+    ep1_id: int,
+    ep2_id: int,
+    dep_id: int,
+    arr_id: int,
+) -> bool:
+    """
+    Verifica daca segmentul (dep_id -> arr_id) face parte din traseul
+    feroviar dintre ep1_id si ep2_id (in orice sens).
+
+    Reutilizeaza logica din tickets._segment_on_personal_path (acelasi
+    algoritm) pentru a aplica regula consistent intre reducerea student
+    si acoperirea cu abonament. Acopera: endpoint exact, segment direct,
+    segment cu transfer.
+    """
+    # Import lazy pentru a evita potentialul import circular
+    from app.routers.tickets import _segment_on_personal_path
+    result = _segment_on_personal_path(db, ep1_id, ep2_id, dep_id, arr_id)
+    return bool(result.get("match"))
+
+
 def find_active_subscription_for_route(
     db: Session,
     user_id: int,
@@ -304,7 +326,20 @@ def find_active_subscription_for_route(
     """
     Cauta un abonament activ al userului care acopera ruta data pentru
     data calatoriei. Returneaza dict cu detalii sau None.
+
+    REGULA: abonamentul acopera nu doar perechea exacta (from_station,
+    to_station), ci si SEGMENTELE de pe traseu, incluzand leg-urile unei
+    calatorii cu schimbare. Exemplu: abonament Faurei <-> Bucuresti
+    acopera si biletul Faurei <-> Buzau si biletul Buzau <-> Bucuresti
+    dintr-o calatorie cu schimbare in Buzau.
+
+    Strategie:
+      1. Match rapid pe perechea exacta (cazul tipic - majoritatea userilor).
+      2. Daca nu e match exact, iteram peste abonamentele active si pentru
+         fiecare verificam daca (from_station_id, to_station_id) e segment
+         intre statiile abonamentului folosind _segment_is_on_route_pair.
     """
+    # ---- Pasul 1: match rapid pe perechea exacta ----
     row = db.execute(
         text("""
             SELECT
@@ -325,15 +360,48 @@ def find_active_subscription_for_route(
         {"uid": user_id, "a": from_station_id, "b": to_station_id, "td": travel_date},
     ).mappings().first()
 
-    if not row:
-        return None
+    if row:
+        return {
+            "subscription_id": row["subscription_id"],
+            "subscription_type": row["subscription_type"],
+            "valid_from": row["valid_from"].isoformat(),
+            "valid_until": row["valid_until"].isoformat(),
+            "match_kind": "endpoint",
+        }
 
-    return {
-        "subscription_id": row["subscription_id"],
-        "subscription_type": row["subscription_type"],
-        "valid_from": row["valid_from"].isoformat(),
-        "valid_until": row["valid_until"].isoformat(),
-    }
+    # ---- Pasul 2: iteram peste abonamentele active si verificam segment ----
+    candidates = db.execute(
+        text("""
+            SELECT
+                subscription_id, subscription_type, valid_from, valid_until,
+                from_station_id, to_station_id
+            FROM subscriptions
+            WHERE user_id = :uid
+              AND status = 'active'
+              AND subscription_scope = 'route'
+              AND valid_from <= :td
+              AND valid_until >= :td
+              AND from_station_id IS NOT NULL
+              AND to_station_id IS NOT NULL
+            ORDER BY valid_until DESC
+            LIMIT 10
+        """),
+        {"uid": user_id, "td": travel_date},
+    ).mappings().all()
+
+    for sub in candidates:
+        ep1 = sub["from_station_id"]
+        ep2 = sub["to_station_id"]
+        if _segment_is_on_route_pair(db, ep1, ep2, from_station_id, to_station_id):
+            return {
+                "subscription_id": sub["subscription_id"],
+                "subscription_type": sub["subscription_type"],
+                "valid_from": sub["valid_from"].isoformat(),
+                "valid_until": sub["valid_until"].isoformat(),
+                "match_kind": "segment",
+            }
+
+    return None
 
 
 # ---------------------------------------------------------------------------

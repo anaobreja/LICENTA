@@ -466,3 +466,171 @@ def my_verification_status(
     """
     user_id = _current_user_id(authorization, db)
     return get_verification_status(db, user_id)
+
+
+@router.get("/me/travel-stats")
+def my_travel_stats(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Statistici personalizate de calatorie pentru dashboard.
+
+    IMPORTANT: o "calatorie efectiva" inseamna ca biletul a fost VALIDAT
+    de conductor (ticket_status = 'used'), NU doar cumparat. Asta reflecta
+    distanta REAL parcursa cu trenul, nu intentii.
+
+      - total_trips: nr bilete cumparate (active + used + cancelled)
+      - completed_trips: nr calatorii efectiv validate (only 'used')
+      - upcoming_trips: bilete active cu travel_date >= azi (informativ)
+      - total_km, total_spent_ron, total_saved_ron: pentru calatoriile validate
+      - co2_saved_kg + trees_equivalent: pentru calatoriile validate
+      - top_trains, monthly, achievements: bazate pe calatorii validate
+    """
+    user_id = _current_user_id(authorization, db)
+
+    tickets = db.execute(
+        text("""
+            SELECT
+                t.ticket_id, t.train_id, t.travel_date, t.price,
+                t.discount_applied, t.ticket_status, t.purchase_time,
+                tr.train_number, tr.train_type,
+                r.total_distance_km
+            FROM tickets t
+            LEFT JOIN trains tr ON tr.train_id = t.train_id
+            LEFT JOIN routes r ON r.route_id = tr.route_id
+            WHERE t.user_id = :uid
+              AND t.ticket_status != 'rescheduled'
+            ORDER BY t.travel_date DESC
+        """),
+        {"uid": user_id},
+    ).mappings().all()
+
+    if not tickets:
+        return {
+            "total_trips": 0, "completed_trips": 0, "upcoming_trips": 0,
+            "total_km": 0, "total_spent_ron": 0, "total_saved_ron": 0,
+            "co2_saved_kg": 0, "trees_equivalent": 0,
+            "top_trains": [], "monthly": [], "achievements": [],
+        }
+
+    # Calatorii efective: doar bilete cu ticket_status='used' (validate de
+    # conductor in tren). 'active' = cumparat dar nu validat inca, 'cancelled'
+    # = anulat. NU contam decat ce s-a intamplat real.
+    completed = [t for t in tickets if t["ticket_status"] == "used"]
+    # Bilete active in viitor (afisare informativa, neinclusa in stats)
+    from datetime import date as _date_today
+    _today = _date_today.today()
+    upcoming = [
+        t for t in tickets
+        if t["ticket_status"] == "active" and t["travel_date"] and t["travel_date"] >= _today
+    ]
+    total_km = 0.0
+    total_spent = 0.0
+    total_saved = 0.0
+
+    from collections import Counter
+    train_counts: dict = {}
+    monthly_counter: Counter = Counter()
+
+    for t in completed:
+        km = float(t["total_distance_km"] or 0)
+        total_km += km
+
+        price = float(t["price"] or 0)
+        total_spent += price
+
+        discount_pct = float(t["discount_applied"] or 0)
+        if discount_pct > 0:
+            if discount_pct >= 100:
+                total_saved += 50.0  # estimare tarif intreg pt bilete gratuite abonament
+            else:
+                full_price = price / (1 - discount_pct / 100)
+                total_saved += (full_price - price)
+
+        tn = t["train_number"] or f"Tren {t['train_id']}"
+        if tn not in train_counts:
+            train_counts[tn] = {
+                "train_number": tn,
+                "train_type": t["train_type"] or "regio",
+                "count": 0,
+            }
+        train_counts[tn]["count"] += 1
+
+        if t["travel_date"]:
+            key = t["travel_date"].strftime("%Y-%m")
+            monthly_counter[key] += 1
+
+    top_trains = sorted(train_counts.values(), key=lambda x: x["count"], reverse=True)[:5]
+
+    from datetime import date as _date
+    today = _date.today()
+    monthly_list = []
+    for i in range(5, -1, -1):
+        y = today.year
+        m = today.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        key = f"{y:04d}-{m:02d}"
+        monthly_list.append({
+            "month": key,
+            "label": _month_label_ro(m, y),
+            "count": monthly_counter.get(key, 0),
+        })
+
+    # CO2 vs masina (120g/km/pasager)
+    co2_kg = round(total_km * 0.12, 1)
+    trees = round(co2_kg / 21, 1) if co2_kg > 0 else 0
+
+    achievements = []
+    if len(completed) >= 1:
+        achievements.append({"code": "first_trip", "label": "Prima calatorie",
+                             "description": "Ai facut prima ta calatorie cu trenul!", "icon": "trophy"})
+    if len(completed) >= 10:
+        achievements.append({"code": "frequent_traveler", "label": "Calator frecvent",
+                             "description": "10+ calatorii efectuate", "icon": "star"})
+    if len(completed) >= 50:
+        achievements.append({"code": "veteran", "label": "Veteran feroviar",
+                             "description": "50+ calatorii efectuate", "icon": "medal"})
+    if total_km >= 1000:
+        achievements.append({"code": "km_1000", "label": "1000km parcursi",
+                             "description": f"Ai parcurs {int(total_km)}km cu trenul", "icon": "road"})
+    if total_km >= 5000:
+        achievements.append({"code": "km_5000", "label": "Globe-trotter",
+                             "description": "5000km+ parcursi", "icon": "globe"})
+    if co2_kg >= 100:
+        achievements.append({"code": "eco_warrior", "label": "Eco-warrior",
+                             "description": f"{co2_kg}kg CO2 economisit", "icon": "leaf"})
+    if total_saved >= 500:
+        achievements.append({"code": "saver", "label": "Economist",
+                             "description": f"Ai economisit {int(total_saved)} RON cu reducerile",
+                             "icon": "wallet"})
+
+    # total_trips = bilete platite care nu au fost anulate/refundate
+    # (active + used + expired). Exclude cancelled/refunded = user-ul a renuntat,
+    # nu ar trebui sa conteze ca "bilet cumparat".
+    meaningful = [t for t in tickets if t["ticket_status"] not in ("cancelled", "refunded")]
+
+    return {
+        "total_trips": len(meaningful),
+        "completed_trips": len(completed),
+        "upcoming_trips": len(upcoming),
+        "total_km": round(total_km, 1),
+        "total_spent_ron": round(total_spent, 2),
+        "total_saved_ron": round(total_saved, 2),
+        "co2_saved_kg": co2_kg,
+        "trees_equivalent": trees,
+        "top_trains": top_trains,
+        "monthly": monthly_list,
+        "achievements": achievements,
+    }
+
+
+_MONTH_RO = ["", "Ian", "Feb", "Mar", "Apr", "Mai", "Iun",
+             "Iul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _month_label_ro(month: int, year: int) -> str:
+    return f"{_MONTH_RO[month]} {year}"
+

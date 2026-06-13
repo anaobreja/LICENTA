@@ -80,7 +80,7 @@ def _account_active(value) -> bool:
 def register(
     first_name: str = Form(..., min_length=2, max_length=100),
     last_name: str = Form(..., min_length=2, max_length=100),
-    email: str = Form(...),
+    email: str = Form(..., min_length=5, max_length=254),  # RFC 5321 max
     password: str = Form(..., min_length=6, max_length=128),
     phone: str = Form(..., min_length=8, max_length=30),
     university_name: str = Form(default=""),
@@ -112,16 +112,34 @@ def register(
 
     is_active = True
 
+    # Match university_name -> university_id (daca exista in DB).
+    # Folosim unaccent() pentru a tolera variatii de diacritice
+    # (frontend trimite "Bucuresti" sau "București", DB poate avea oricare).
+    university_id = None
+    if university_clean:
+        uni_row = db.execute(
+            text(
+                """
+                SELECT university_id FROM universities
+                WHERE unaccent(LOWER(name)) = unaccent(LOWER(:n))
+                LIMIT 1
+                """
+            ),
+            {"n": university_clean},
+        ).first()
+        if uni_row:
+            university_id = uni_row[0]
+
     created = db.execute(
         text(
             """
             INSERT INTO users (
                 first_name, last_name, email, password_hash, phone,
-                university_name, profile_photo_path, role, is_active
+                university_name, university_id, profile_photo_path, role, is_active
             )
             VALUES (
                 :first_name, :last_name, :email, :password_hash, :phone,
-                :university_name, :profile_photo_path, 'passenger', :is_active
+                :university_name, :university_id, :profile_photo_path, 'passenger', :is_active
             )
             RETURNING user_id, first_name, last_name, email, role, phone, university_name
             """
@@ -133,6 +151,7 @@ def register(
             "password_hash": password_hash,
             "phone": phone_clean,
             "university_name": university_clean,
+            "university_id": university_id,
             "profile_photo_path": profile_path,
             "is_active": is_active,
         },

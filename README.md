@@ -37,6 +37,8 @@ Sistem de gestionare a **identității digitale** pentru studenți, cu verificar
 - **Sistem complet de bilete cu logică CFR realistă**: selecție loc real-time (hold 5 min), anti-overlap pe intervale orare, anulare cu refund pe trepte (100% / 50% / 0%), reprogramare pe același traseu — vezi secțiunea dedicată mai jos
 - **Imutabilitate date personale după validare**: câmpurile CNP, nume, data nașterii și stația de domiciliu devin frozen până la expirarea verificării (1 octombrie, începutul anului universitar următor). Previne identity laundering — vezi secțiunea 4.1 din SECURITY_ASSESSMENT.md
 - **Abonamente CFR cu scope pe ruta** (`monthly`/`annual`): cumparare cu reducere 90% pentru studenti pe ruta home <-> universitate (OUG 11/2024), anti-overlap pe ruta, anulare cu refund pro-rata. Biletele pe ruta acoperita devin automat gratuite (price=0, marcate cu `uses_subscription_id`). Notificare 7 zile inainte de expirare. Vezi sectiunea dedicata mai jos.
+- **Harta feroviara interactiva cu trasee reale CFR**: vizualizare ruta pe OpenStreetMap + OpenRailwayMap, polilinia urmeaza sina prin toate statiile intermediare cu GPS, markerele afiseaza DOAR opririle comerciale reale ale trenului (filtrate prin `is_commercial_stop` din XML CFR/Ferotrafic). Operatorul fiecarui tren (CFR Calatori, Ferotrafic, Regio Calatori, Astra Trans Carpatic, etc.) e afisat explicit langa numarul trenului — utilizatorul vede clar diferentele intre operatori (ex: IC 553 CFR opreste la Ploiesti Sud, IC 11762 Ferotrafic NU opreste, conform XML oficial). Vezi sectiunea "Harta feroviara" mai jos.
+- **Pipeline de geocoding GPS multi-pass cu trasabilitate completa**: cele 1818 statii CFR au fost geocodate automat (99.5% acoperire) prin OpenStreetMap (Overpass + Nominatim) + interpolare iterativa din vecinii pe rute, cu blacklist persistent pentru outlieri. ZERO coordonate hardcodate. Sursa fiecarei coordonate (`gps_source`) e trasabila in DB cu tier-uri A-F (manual / OSM-exact / OSM-bbox / interpolare / Nominatim / legacy). Vezi sectiunea "Calitatea datelor GPS" mai jos.
 - **Test automate**: 203 teste backend (pytest, 55 noi: 18 bilete + 17 frozen + 20 abonamente) + 19 teste frontend (Node + Web Crypto API), toate trec
 
 ### Work in progress / Limitări cunoscute
@@ -44,6 +46,7 @@ Sistem de gestionare a **identității digitale** pentru studenți, cu verificar
 - **Aplicație web mobilă / deploy în cloud** - urmează ca platforma să fie publicată pe un serviciu cloud (Render / Railway.app), accesibilă de pe orice dispozitiv fără rulare locală; momentan aplicația rulează local și poate fi accesată de pe telefon în aceeași rețea (vezi secțiunea de mai jos)
 - Prezentare selectivă a credențialelor (student alege ce claims să dezvăluie)
 - Dashboard de fraudă / anomalii (token reutilizat, respingeri repetate)
+- **9 stații (din 1818) rămân fără GPS** — toate sunt ramificații tehnice fără reprezentare în OpenStreetMap (ex: `Ram. Pav. C.F.R.`, `Ramificația C.S.G.`) sau gări din Bulgaria fără nume normalizate (Vidin, Kapitanovci). Doar 3 sunt comerciale, restul sunt puncte tehnice de trecere care nu apar oricum în UI (filtrate prin `is_commercial_stop`). Soluția: integrare cu o sursă oficială pentru poziții fizice de cale ferată (de ex. CFR Infrastructură).
 
 ---
 
@@ -325,6 +328,91 @@ Backend: `tests/integration/test_subscriptions.py`. 6 categorii:
 - **Integrare bilete** (2): bilet pe ruta acoperita = 0 RON, pe alta = pret normal
 
 ---
+
+---
+
+## Harta feroviara interactiva
+
+Aplicatia include o **harta a retelei feroviare CFR** cu vizualizare interactiva a traseelor pentru orice pereche origine-destinatie din cele 1818 statii.
+
+### Datele utilizate
+
+Datele sunt importate din **XML-urile oficiale** publicate pe [data.gov.ro](https://data.gov.ro/) de catre cei 7 operatori feroviari romani:
+
+| Operator | XML | Trenuri |
+|----------|-----|---------|
+| SNTFC CFR Călători S.A. | `cfr_sntfc.xml` | 1256 |
+| Regio Călători S.R.L. | `regio.xml` | 273 |
+| Transferoviar Călători S.R.L. | `tfc.xml` | 303 |
+| Interregional Călători S.R.L. | `interregional.xml` | 216 |
+| Astra Trans Carpatic S.R.L. | `astra.xml` | 21 |
+| Softrans S.R.L. | `softrans.xml` | 16 |
+| Ferotrafic TFI S.R.L. | `ferotrafic.xml` | 18 |
+
+Total: **2103 trenuri active**, **46.501 opriri**, **1818 statii** (importate prin `database/import_cfr.py`).
+
+### Distinctia intre statii de oprire si statii de trecere
+
+Atributul XML `TipOprire` per segment specifica daca trenul **opreste comercial** la o statie (`C` = oprire cu (de)imbarcare calatori, `StationareSecunde > 0`) sau **doar trece** prin ea (`N` = trecere tehnica, fara oprire). Sistemul mapeaza acest atribut in coloana `route_stops.is_commercial_stop` din DB.
+
+**Endpoint-ul `GET /map/route-geometry` returneaza doua liste separate:**
+
+- `stops` — DOAR opririle reale (comerciale + capete de leg) → afisate ca **markere violet pe harta**
+- `geometry_points` — TOATE statiile cu GPS pe ruta (inclusiv tehnice de trecere) → folosite pentru **polilinia colorata** care urmeaza sina reala
+
+Astfel polilinia urmeaza traseul real al caii ferate (de ex. Bucuresti → Buzau trece prin Mizil, Ploiesti, Inotesti), dar markerele violet apar **doar acolo unde trenul opreste cu adevarat** — diferit per operator!
+
+**Exemplu concret**: pe ruta Bucuresti Nord ↔ Buzau exista 15 trenuri IC zilnice:
+
+| Operator | Trenuri IC | Oprire la Ploiesti Sud? |
+|----------|-----------|:----------------------:|
+| **CFR Calatori** | 551, 553, 561, 564, 571 etc. | ✅ Toate opresc (120s stationare) |
+| **Ferotrafic** | 11751, 11752, 11761, 11762 etc. | ❌ Niciuna nu opreste (strategie tren rapid) |
+
+Operatorul fiecarui tren e afisat explicit langa numarul lui in UI-ul hartii pentru transparenta sursei.
+
+### Calitatea datelor GPS
+
+Cele 1818 statii CFR nu au coordonate in XML — au fost geocodate automat prin pipeline-ul `database/geocode_stations_v2.py`, in **7 pasuri**:
+
+| Pas | Strategie | Stații recuperate |
+|-----|-----------|:-----------------:|
+| PASS 0 | Detect outlieri (salt > 60km vs km CFR) → blacklist | — (validare) |
+| PASS 1 | Descarca OSM via Overpass API (railway=station/halt/stop in RO) | 4903 noduri |
+| PASS 2 | Match exact dupa nume normalizat (NFKD + fix diacritice ț/ş) | 220 |
+| PASS 3 | Match cu bbox contextual (intre vecinii cu GPS cunoscut) | 162 |
+| PASS 4 | Fallback Nominatim (rate-limited 1 req/s) | 44 |
+| PASS 4.5 | Interpolare iterativa din vecinii imediati pe rute | 112 |
+| PASS 5 | Override manual (DEZACTIVAT — vezi nota mai jos) | 0 |
+
+**Acoperire finala: 99.5% (1809/1818 statii)**, **0 outlieri** (verificat prin `gps_dist > 1.5 × cfr_dist + 20km`).
+
+#### Decizie de design: ZERO coordonate hardcodate
+
+Versiunile timpurii ale pipeline-ului foloseau ~29 override-uri manuale (statii cu GPS scris in cod, ex: Aeroport Otopeni T1, statii litoral). **Au fost eliminate complet** dintr-un considerent de onestitate stiintifica:
+
+1. Hardcodarea ascunde gap-urile reale ale datelor sursei
+2. O statie cu GPS hardcodat ar arata in DB la fel de "valida" ca una geocodata din OSM, desi sursa e diferita → compromite trasabilitatea pentru lucrarea academica
+3. Mai bine 9 statii **raportate cinstit fara GPS** decat 0 statii cu GPS ghicit
+
+Pipeline-ul actual recupereaza 26/29 statii automat (OSM exact + bbox + Nominatim + interpolare); cele 3 ramase comerciale (Berești, Balintești, Vidin Patnicheska) sunt **blacklisted explicit** ca outlieri detectati de algoritm.
+
+#### Trasabilitate prin `gps_source`
+
+Tabelul `stations` are coloana `gps_source` care pastreaza **provenienta exacta** a coordonatelor. Distribuția curentă (vizibilă în view-ul `v_stations_gps_summary`):
+
+| Tier | Sursa | Statii |
+|:----:|------|------:|
+| A | manual (hardcodat) | **0** ⭐ |
+| B | OSM exact / shorter / firstword | 47 |
+| C | OSM cu validare bbox de ruta | 151 |
+| D | interpolare iterativa din vecini | 110 |
+| E | Nominatim fallback | 44 |
+| F | geocodare initiala (pre-v2) | 1435 |
+| - | blacklisted (outlieri detectati) | 3 |
+| X | fara GPS (ramificatii tehnice) | 9 |
+
+Documentatia completa a pipeline-ului si view-urile SQL de monitorizare: vezi `database/09_gps_quality_view.sql`.
 
 ---
 

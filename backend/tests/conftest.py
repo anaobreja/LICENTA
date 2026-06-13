@@ -118,8 +118,25 @@ def _recreate_test_database():
                 cur.execute(sql)
 
 def _truncate_transactional_tables(engine):
-    """Goleste tabelele tranzitorii (pastreaza seed-ul demo)."""
+    """Goleste tabelele tranzitorii (pastreaza seed-ul demo).
+
+    Foloseste lock_timeout=5s ca sa NU blocam intreaga sesiune pytest daca
+    un test precedent a lasat o conexiune cu BEGIN deschis pe un tabel
+    (de ex. tickets / subscriptions). In acel caz, TRUNCATE ar astepta
+    la infinit lock-ul -> hang. Cu lock_timeout, primim eroare clara dupa 5s.
+
+    In plus, inainte de TRUNCATE, terminam orice backend "idle in transaction"
+    pe DB-ul de test (cleanup defensiv impotriva leak-urilor de sesiune).
+    """
     with engine.begin() as conn:
+        # lock_timeout local: daca TRUNCATE nu poate prinde lock-ul in 5s,
+        # primim "canceling statement due to lock timeout" — vizibil in log,
+        # in loc de hang infinit. Aceasta e plasa de siguranta in cazul in care
+        # un test viitor uita iarasi sa inchida o conexiune (vezi bug-ul cu
+        # _engine().connect() din test_subscription_segments.py rezolvat
+        # prin helper-ul `_find_sub`).
+        conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+
         rows = conn.execute(text(
             "SELECT table_name FROM information_schema.tables "
             "WHERE table_schema='public' AND table_type='BASE TABLE'"
@@ -137,6 +154,10 @@ def _setup_test_database():
     """Creeaza DB de test o singura data per sesiune."""
     _recreate_test_database()
     yield
+    # Inchide pool-ul SQLAlchemy la finalul sesiunii pentru a evita
+    # ResourceWarning din psycopg (conexiuni GC-ate cu pool deschis).
+    from app.core.database import engine as _eng
+    _eng.dispose()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -210,6 +231,7 @@ def _seed_default_train_catalog(_setup_test_database):
 
         # Genereaza vagoane si locuri
         conn.execute(text("SELECT generate_train_layout(:t)"), {"t": train_id})
+
 
         # Tariff brackets — schema reala: train_category (R/IR/IC), train_class (1/2),
         # km_from/km_to (intervale de distanta), price_ron.

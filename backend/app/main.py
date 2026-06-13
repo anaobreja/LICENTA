@@ -3,6 +3,7 @@ FastAPI Backend - Sistem Gestionare Identitate Digitala Calatori
 Main application entry point.
 """
 
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -12,6 +13,19 @@ from app.core.config import settings
 from app.core.database import SessionLocal, verify_schema_loaded
 from app.routers import auth, crypto_keys, identity, seats, subscriptions, tickets, users
 from app.routers import map as map_router
+
+
+def _prewarm_ocr():
+    """Incarca modelele EasyOCR in background la startup ca prima cerere sa fie rapida."""
+    try:
+        import easyocr  # noqa: PLC0415
+        from app.routers.identity import _get_ocr_reader
+        _get_ocr_reader()
+        print("EasyOCR reader pre-warmed OK")
+    except Exception as exc:
+        print(f"EasyOCR pre-warm failed (non-fatal): {exc}")
+
+
 # Lifespan: la startup verificam ca schema PostgreSQL este incarcata
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,6 +36,7 @@ async def lifespan(app: FastAPI):
     except RuntimeError as exc:
         print(f"SCHEMA ERROR: {exc}")
         raise
+    threading.Thread(target=_prewarm_ocr, daemon=True).start()
     yield
     print("Shutting down.")
 

@@ -32,6 +32,8 @@ class TestDocumentManagement:
                 "ci_name": "Test User",
                 "ci_date_of_birth": "2000-01-01",
                 "ci_sex": "M",
+                "ci_address": "Str. Test, jud. Test",
+                "home_station_id": "1",
             },
             files={
                 "legitimation_photo_front": ("front.png", create_test_image_bytes(), "image/png"),
@@ -184,6 +186,8 @@ class TestUniversityAgentWorkflow:
                 "ci_name": "Integration Test",
                 "ci_date_of_birth": "2001-03-10",
                 "ci_sex": "F",
+                "ci_address": "Str. Test, jud. Test",
+                "home_station_id": "1",
             },
             files={
                 "legitimation_photo_front": ("front.png", create_test_image_bytes(), "image/png"),
@@ -344,6 +348,8 @@ class TestQRReplaySecurity:
                 "ci_name": "Replay Test",
                 "ci_date_of_birth": "2002-05-15",
                 "ci_sex": "M",
+                "ci_address": "Str. Test, jud. Test",
+                "home_station_id": "1",
             },
             files={
                 "legitimation_photo_front": ("front.png", create_test_image_bytes(), "image/png"),
@@ -430,6 +436,8 @@ class TestCrossUniversityAuthorizationSecurity:
                 "ci_name": "UPB Test",
                 "ci_date_of_birth": "2003-01-01",
                 "ci_sex": "F",
+                "ci_address": "Str. Test, jud. Test",
+                "home_station_id": "1",
             },
             files={
                 "legitimation_photo_front": ("f.png", create_test_image_bytes(), "image/png"),

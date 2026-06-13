@@ -36,6 +36,10 @@ function Notifications() {
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: 1 } : n))
       )
+      // Anunta restul aplicatiei (in special badge-ul din navbar) ca s-a
+      // schimbat starea notificarilor, ca sa actualizeze contorul imediat,
+      // fara sa astepte intervalul de 60s sau focus pe fereastra.
+      window.dispatchEvent(new Event('notifications:changed'))
     } catch (err) {
       setError(err.message || 'Nu am putut marca notificarea')
     }
